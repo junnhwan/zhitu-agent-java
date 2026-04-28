@@ -5,7 +5,7 @@
 
 ## 总体状态
 
-项目已经完成基础骨架，`Task 1` 到 `Task 3` 的 MVP 主链仍然存在，但底层的关键基础设施已经不再只有本地兜底。当前已经完成“真实模型调用第一步 + 可切换基础设施接口层第一步”，并且 Redis 与 pgvector 的真实运行链路都已完成首轮联调验证。
+项目第一阶段已经完成，`Task 1` 到 `Task 4` 的后端主链、trace 基线和基础评估样例都已经落地，并已完成阶段性提交。底层关键基础设施也不再只有本地兜底，Redis 与 pgvector 的真实运行链路都已完成首轮联调验证。
 
 目前状态需要明确区分：
 
@@ -14,8 +14,11 @@
 - 已完成：Redis 真实运行链路已经完成手工联调
 - 已完成：pgvector + embedding 的真实 dense retrieval 链路已经完成手工联调
 - 已完成：联调所需的最小日志与链路观测已补入
+- 已完成：第一阶段基线已提交，提交号为 `f5b66c3`
+- 已完成：第二阶段优化计划文档已补入 `docs/2026-04-28-zhitu-agent-java-phase-two-plan.md`
+- 已完成：第二阶段 `Task 1` 的评估运行器与 trace 扩展第一版已落地
 - 部分完成：当前还没有接入 rerank，也没有混合检索
-- 未完成：rerank、hybrid retrieval 和第二阶段增强项还没有开始主实现
+- 未完成：第二阶段 `Task 2` 到 `Task 4` 还未开始主实现
 
 ## 当前进展
 
@@ -25,7 +28,56 @@
 - 已完成：设计文档 `docs/2026-04-27-zhitu-agent-java-design.md`
 - 已完成：接口文档 `docs/2026-04-27-zhitu-agent-java-api.md`
 - 已完成：实现计划 `docs/2026-04-27-zhitu-agent-java-implementation-plan.md`
+- 已完成：第二阶段计划文档 `docs/2026-04-28-zhitu-agent-java-phase-two-plan.md`
 - 已完成：文档术语已统一切到 `Task 1/2/3/4`，并明确当前仓库以后端链路为主
+
+### 第二阶段 Task 1：评估运行器与 trace 扩展
+
+状态：已完成第一版
+
+已完成内容：
+
+- 已扩展 `TraceInfo` 返回字段：
+  - `retrievalCandidateCount`
+  - `rerankModel`
+  - `rerankTopScore`
+- 已扩展 `RouteDecision` 中间态：
+  - `retrievalMode`
+  - `retrievalCandidateCount`
+  - `rerankModel`
+  - `rerankTopScore`
+- 已新增测试侧评估模型：
+  - `src/test/java/com/zhituagent/eval/BaselineEvalCase.java`
+  - `src/test/java/com/zhituagent/eval/BaselineEvalResult.java`
+  - `src/test/java/com/zhituagent/eval/BaselineEvalRunner.java`
+  - `src/test/java/com/zhituagent/eval/BaselineEvalRunnerTest.java`
+- 已把 `src/test/resources/eval/baseline-chat-cases.jsonl` 从静态样例升级为带结构化预置能力的 fixture：
+  - `expectedRetrievalHit`
+  - `expectedToolUsed`
+  - `expectedSummaryPresentBeforeRun`
+  - `knowledgeEntries`
+  - `historyTurns`
+- `BaselineEvalRunner` 当前已支持：
+  - 读取 JSONL fixture
+  - 预置知识
+  - 预热多轮会话
+  - 调用现有 `/api/chat`
+  - 汇总路由命中、RAG 命中、Tool 命中、延迟、token 估算
+  - 输出报告到 `target/eval-reports/`
+
+已完成验证：
+
+- 已先写失败测试，再补实现：
+  - `ChatControllerTest`
+  - `BaselineEvalFixtureTest`
+  - `BaselineEvalRunnerTest`
+- `.\mvnw.cmd "-Dtest=ChatControllerTest,BaselineEvalFixtureTest,BaselineEvalRunnerTest" test` 已通过
+- `.\mvnw.cmd test` 已通过
+
+说明：
+
+- 这一版评估器先放在 `src/test/java`，避免把实验性评估逻辑过早塞进生产主链
+- 当前 trace 已经为后续 rerank / hybrid retrieval 预留字段，但真正填充这些字段要到第二阶段 `Task 2` 之后
 
 ### Task 1：项目骨架、基础 API、SSE
 
@@ -309,6 +361,10 @@ pgvector 手工联调结果：
 - `.\mvnw.cmd -Dtest=ChatControllerTest,BaselineEvalFixtureTest test` 已通过
 - `.\mvnw.cmd test` 已通过
 
+阶段提交：
+
+- 已提交：`f5b66c3 feat: complete phase-one backend baseline and tracing`
+
 ## 运行状态
 
 - 当前未确认应用正处于持续运行状态
@@ -325,8 +381,6 @@ pgvector 手工联调结果：
 
 ## 下一步
 
-1. 补真实 provider 接入，把当前 mock / fallback 模式逐步换成可调用模型
-2. 在当前真实基础设施链路上补 trace 字段和更稳定的调试信息
-3. 开始补 `Task 4` 里提到的评估基线文件
-4. 逐步接入 rerank
-5. 为后续 hybrid retrieval 和可量化优化做准备
+1. 开始实现第二阶段 `Task 2`：接入查询预处理与 `dense recall -> rerank`
+2. 然后实现第二阶段 `Task 3`：补 hybrid retrieval 与中文优化切分
+3. 最后实现第二阶段 `Task 4`：补 Prometheus 指标与 Redis 记忆并发保护

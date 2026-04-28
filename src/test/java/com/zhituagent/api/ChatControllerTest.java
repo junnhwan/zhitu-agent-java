@@ -86,6 +86,9 @@ class ChatControllerTest {
                 .andExpect(jsonPath("$.trace.snippetCount").value(0))
                 .andExpect(jsonPath("$.trace.topSource").value(""))
                 .andExpect(jsonPath("$.trace.topScore").value(0.0))
+                .andExpect(jsonPath("$.trace.retrievalCandidateCount").value(0))
+                .andExpect(jsonPath("$.trace.rerankModel").value(""))
+                .andExpect(jsonPath("$.trace.rerankTopScore").value(0.0))
                 .andExpect(jsonPath("$.trace.inputTokenEstimate").isNumber())
                 .andExpect(jsonPath("$.trace.outputTokenEstimate").isNumber());
     }
@@ -112,6 +115,9 @@ class ChatControllerTest {
         assertThat(mvcResult.getResponse().getContentAsString(), containsString("event:complete"));
         assertThat(mvcResult.getResponse().getContentAsString(), containsString("\"retrievalMode\":\"none\""));
         assertThat(mvcResult.getResponse().getContentAsString(), containsString("\"contextStrategy\":\"recent-summary\""));
+        assertThat(mvcResult.getResponse().getContentAsString(), containsString("\"retrievalCandidateCount\":0"));
+        assertThat(mvcResult.getResponse().getContentAsString(), containsString("\"rerankModel\":\"\""));
+        assertThat(mvcResult.getResponse().getContentAsString(), containsString("\"rerankTopScore\":0.0"));
         assertThat(mvcResult.getResponse().getContentAsString(), containsString("\"inputTokenEstimate\":"));
         assertThat(mvcResult.getResponse().getContentAsString(), containsString("\"outputTokenEstimate\":"));
     }

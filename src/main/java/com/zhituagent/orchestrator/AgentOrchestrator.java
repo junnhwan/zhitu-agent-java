@@ -25,36 +25,15 @@ public class AgentOrchestrator {
             ToolResult toolResult = toolRegistry.find("time")
                     .orElseThrow()
                     .execute(Map.of("query", userMessage));
-            return new RouteDecision(
-                    "tool-then-answer",
-                    false,
-                    true,
-                    "time",
-                    toolResult,
-                    List.of()
-            );
+            return RouteDecision.tool("time", toolResult);
         }
 
         List<KnowledgeSnippet> snippets = ragRetriever.retrieve(userMessage, 3);
         if (!snippets.isEmpty()) {
-            return new RouteDecision(
-                    "retrieve-then-answer",
-                    true,
-                    false,
-                    null,
-                    null,
-                    snippets
-            );
+            return RouteDecision.denseRetrieval(snippets);
         }
 
-        return new RouteDecision(
-                "direct-answer",
-                false,
-                false,
-                null,
-                null,
-                List.of()
-        );
+        return RouteDecision.direct();
     }
 
     private boolean looksLikeTimeQuestion(String userMessage) {

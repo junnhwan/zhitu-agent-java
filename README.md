@@ -11,11 +11,12 @@
 
 当前状态：
 
-- `Task 1` 到 `Task 3` 主链已打通
+- 第一阶段 `Task 1` 到 `Task 4` 已完成
 - 已支持真实 OpenAI 兼容对话模型接入
 - 已支持可切换的 Redis 会话/记忆存储
 - 已支持可切换的 pgvector dense RAG
-- `Task 4` 已开始，当前已补第一段 trace 与 baseline eval 基线
+- 已补第一版 trace 字段与 baseline eval fixture
+- 第二阶段计划文档已补入 `docs/2026-04-28-zhitu-agent-java-phase-two-plan.md`
 
 ## 运行要求
 
@@ -81,6 +82,7 @@ spring:
 - `docs/2026-04-27-zhitu-agent-java-design.md`
 - `docs/2026-04-27-zhitu-agent-java-api.md`
 - `docs/2026-04-27-zhitu-agent-java-implementation-plan.md`
+- `docs/2026-04-28-zhitu-agent-java-phase-two-plan.md`
 
 ## 当前观测能力
 

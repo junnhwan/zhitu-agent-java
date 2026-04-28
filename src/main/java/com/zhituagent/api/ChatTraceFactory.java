@@ -13,8 +13,8 @@ public class ChatTraceFactory {
 
     private static final String DEFAULT_PATH = "direct-answer";
     private static final String DEFAULT_RETRIEVAL_MODE = "none";
-    private static final String DENSE_RETRIEVAL_MODE = "dense";
     private static final String CONTEXT_STRATEGY = "recent-summary";
+    private static final String DEFAULT_RERANK_MODEL = "";
 
     public TraceInfo create(RouteDecision routeDecision,
                             String requestId,
@@ -32,16 +32,26 @@ public class ChatTraceFactory {
                 routeDecision == null ? DEFAULT_PATH : routeDecision.path(),
                 routeDecision != null && routeDecision.retrievalHit(),
                 routeDecision != null && routeDecision.toolUsed(),
-                routeDecision != null && routeDecision.retrievalHit() ? DENSE_RETRIEVAL_MODE : DEFAULT_RETRIEVAL_MODE,
+                resolveRetrievalMode(routeDecision),
                 CONTEXT_STRATEGY,
                 requestId == null || requestId.isBlank() ? "-" : requestId,
                 Math.max(0, latencyMs),
                 snippets.size(),
                 topSnippet == null ? "" : topSnippet.source(),
                 topSnippet == null ? 0.0 : topSnippet.score(),
+                routeDecision == null ? 0 : Math.max(0, routeDecision.retrievalCandidateCount()),
+                routeDecision == null || routeDecision.rerankModel() == null ? DEFAULT_RERANK_MODEL : routeDecision.rerankModel(),
+                routeDecision == null ? 0.0 : routeDecision.rerankTopScore(),
                 inputTokenEstimate,
                 outputTokenEstimate
         );
+    }
+
+    private String resolveRetrievalMode(RouteDecision routeDecision) {
+        if (routeDecision == null || routeDecision.retrievalMode() == null || routeDecision.retrievalMode().isBlank()) {
+            return DEFAULT_RETRIEVAL_MODE;
+        }
+        return routeDecision.retrievalMode();
     }
 
     private long estimateMessages(List<String> inputMessages) {

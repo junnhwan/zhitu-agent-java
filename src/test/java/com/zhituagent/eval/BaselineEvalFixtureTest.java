@@ -42,6 +42,26 @@ class BaselineEvalFixtureTest {
             assertThat(node.path("type").asText()).isNotBlank();
             assertThat(node.path("message").asText()).isNotBlank();
             assertThat(node.path("expectedPath").asText()).isNotBlank();
+            assertThat(node.path("expectedRetrievalHit").isBoolean()).isTrue();
+            assertThat(node.path("expectedToolUsed").isBoolean()).isTrue();
+            assertThat(node.path("expectedSummaryPresentBeforeRun").isBoolean()).isTrue();
+
+            if (node.has("knowledgeEntries")) {
+                assertThat(node.path("knowledgeEntries").isArray()).isTrue();
+                node.path("knowledgeEntries").forEach(knowledgeEntry -> {
+                    assertThat(knowledgeEntry.path("question").asText()).isNotBlank();
+                    assertThat(knowledgeEntry.path("answer").asText()).isNotBlank();
+                    assertThat(knowledgeEntry.path("sourceName").asText()).isNotBlank();
+                });
+            }
+
+            if (node.has("historyTurns")) {
+                assertThat(node.path("historyTurns").isArray()).isTrue();
+                node.path("historyTurns").forEach(historyTurn -> {
+                    assertThat(historyTurn.path("user").asText()).isNotBlank();
+                    assertThat(historyTurn.path("assistant").asText()).isNotBlank();
+                });
+            }
         } catch (IOException exception) {
             throw new AssertionError("Invalid JSONL line: " + line, exception);
         }

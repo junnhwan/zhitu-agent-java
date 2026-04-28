@@ -69,9 +69,16 @@
   - `docs/2026-04-27-zhitu-agent-java-design.md`
   - `docs/2026-04-27-zhitu-agent-java-api.md`
   - `docs/2026-04-27-zhitu-agent-java-implementation-plan.md`
+  - `docs/2026-04-28-zhitu-agent-java-phase-two-plan.md`
 - 需要默认知道：
-  - `Task 1` 到 `Task 3` 的基础主链已经完成
+  - 第一阶段 `Task 1` 到 `Task 4` 已全部完成
   - 真实 LLM 调用已接入
   - Redis 真实链路已完成首轮联调
   - pgvector + dense retrieval 真实链路已完成首轮联调
-  - 当前下一步重点应转向 `Task 4` 的 trace、评估基线和后续增强
+  - 第一阶段收口提交为：`f5b66c3 feat: complete phase-one backend baseline and tracing`
+  - 当前下一步重点已转向第二阶段优化：
+    - 评估基线运行器
+    - rerank
+    - hybrid retrieval
+    - Prometheus 指标
+    - Redis 记忆并发保护

@@ -11,6 +11,9 @@ public record TraceInfo(
         int snippetCount,
         String topSource,
         double topScore,
+        int retrievalCandidateCount,
+        String rerankModel,
+        double rerankTopScore,
         long inputTokenEstimate,
         long outputTokenEstimate
 ) {
