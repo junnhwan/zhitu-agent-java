@@ -5,6 +5,9 @@ import com.sun.net.httpserver.HttpServer;
 import com.zhituagent.config.LlmProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -18,6 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@ExtendWith(OutputCaptureExtension.class)
 class LangChain4jLlmRuntimeTest {
 
     private HttpServer server;
@@ -84,6 +88,18 @@ class LangChain4jLlmRuntimeTest {
         assertThat(requests).hasSize(1);
         assertThat(requests.getFirst().path()).isEqualTo("/v1/chat/completions");
         assertThat(requests.getFirst().body()).contains("\"stream\" : true");
+    }
+
+    @Test
+    void shouldLogWhenUsingMockFallbackForGenerate(CapturedOutput output) {
+        LlmProperties properties = new LlmProperties();
+        properties.setMockMode(true);
+
+        LangChain4jLlmRuntime runtime = new LangChain4jLlmRuntime(properties);
+        String answer = runtime.generate("你是测试助手", List.of("USER: 你好"), Map.of());
+
+        assertThat(answer).isEqualTo("Mock runtime: USER: 你好");
+        assertThat(output).contains("llm.generate.completed provider=mock messageCount=1");
     }
 
     private void startServer(List<CapturedRequest> requests) throws IOException {

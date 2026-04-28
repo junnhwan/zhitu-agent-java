@@ -11,6 +11,8 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -26,6 +28,7 @@ import java.util.function.Consumer;
 @Service
 public class LangChain4jLlmRuntime implements LlmRuntime {
 
+    private static final Logger log = LoggerFactory.getLogger(LangChain4jLlmRuntime.class);
     private static final Duration MODEL_TIMEOUT = Duration.ofSeconds(60);
     private static final long STREAM_TIMEOUT_SECONDS = 90;
 
@@ -39,13 +42,28 @@ public class LangChain4jLlmRuntime implements LlmRuntime {
 
     @Override
     public String generate(String systemPrompt, List<String> messages, Map<String, Object> metadata) {
+        long startNanos = System.nanoTime();
         if (shouldUseRealProvider()) {
             ChatResponse response = getChatModel().chat(toChatMessages(systemPrompt, messages));
-            return response.aiMessage() == null || response.aiMessage().text() == null
+            String answer = response.aiMessage() == null || response.aiMessage().text() == null
                     ? ""
                     : response.aiMessage().text();
+            log.info(
+                    "模型调用完成 llm.generate.completed provider=openai-compatible messageCount={} model={} latencyMs={}",
+                    messages.size(),
+                    properties.getModelName(),
+                    elapsedMillis(startNanos)
+            );
+            return answer;
         }
-        return fallbackAnswer(messages);
+        String answer = fallbackAnswer(messages);
+        log.info(
+                "模型调用完成 llm.generate.completed provider=mock messageCount={} model={} latencyMs={}",
+                messages.size(),
+                properties.getModelName(),
+                elapsedMillis(startNanos)
+        );
+        return answer;
     }
 
     @Override
@@ -54,6 +72,7 @@ public class LangChain4jLlmRuntime implements LlmRuntime {
                        Map<String, Object> metadata,
                        Consumer<String> onToken,
                        Runnable onComplete) {
+        long startNanos = System.nanoTime();
         if (shouldUseRealProvider()) {
             CountDownLatch completionLatch = new CountDownLatch(1);
             AtomicReference<Throwable> errorRef = new AtomicReference<>();
@@ -89,6 +108,12 @@ public class LangChain4jLlmRuntime implements LlmRuntime {
             });
 
             awaitStreamingCompletion(completionLatch, errorRef);
+            log.info(
+                    "模型流式调用完成 llm.stream.completed provider=openai-compatible messageCount={} model={} latencyMs={}",
+                    messages.size(),
+                    properties.getModelName(),
+                    elapsedMillis(startNanos)
+            );
             return;
         }
 
@@ -99,6 +124,12 @@ public class LangChain4jLlmRuntime implements LlmRuntime {
             }
         }
         onComplete.run();
+        log.info(
+                "模型流式调用完成 llm.stream.completed provider=mock messageCount={} model={} latencyMs={}",
+                messages.size(),
+                properties.getModelName(),
+                elapsedMillis(startNanos)
+        );
     }
 
     private String fallbackAnswer(List<String> messages) {
@@ -204,5 +235,9 @@ public class LangChain4jLlmRuntime implements LlmRuntime {
 
     private boolean isNotBlank(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private long elapsedMillis(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1_000_000;
     }
 }

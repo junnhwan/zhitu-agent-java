@@ -139,7 +139,16 @@ http://localhost:8080/api
   "trace": {
     "path": "retrieve-then-answer",
     "retrievalHit": true,
-    "toolUsed": false
+    "toolUsed": false,
+    "retrievalMode": "dense",
+    "contextStrategy": "recent-summary",
+    "requestId": "req_xxx",
+    "latencyMs": 128,
+    "snippetCount": 2,
+    "topSource": "project-notes.md",
+    "topScore": 0.83,
+    "inputTokenEstimate": 96,
+    "outputTokenEstimate": 34
   }
 }
 ```
@@ -147,7 +156,17 @@ http://localhost:8080/api
 说明：
 
 - `trace.path` 第一版建议返回，便于前端演示和后续评估。
-- `trace` 可以先做轻量字段，不必在第一版扩成完整 tracing。
+- 当前第一段增强后，`trace` 已额外返回：
+  - `retrievalMode`
+  - `contextStrategy`
+  - `requestId`
+  - `latencyMs`
+  - `snippetCount`
+  - `topSource`
+  - `topScore`
+  - `inputTokenEstimate`
+  - `outputTokenEstimate`
+- 当前这些字段主要用于联调、观测和后续评估，不代表已经实现完整 tracing 平台。
 
 curl 示例：
 
@@ -186,7 +205,7 @@ data: {"content":"第一版建议先把"}
 
 ```text
 event: complete
-data: {"path":"tool-then-answer","retrievalHit":false,"toolUsed":true}
+data: {"path":"tool-then-answer","retrievalHit":false,"toolUsed":true,"retrievalMode":"none","contextStrategy":"recent-summary","requestId":"req_xxx","latencyMs":66,"snippetCount":0,"topSource":"","topScore":0.0,"inputTokenEstimate":72,"outputTokenEstimate":18}
 ```
 
 #### `error`

@@ -1,0 +1,4 @@
+{"caseId":"direct-001","type":"direct-answer","message":"你好，请介绍一下你自己","expectedPath":"direct-answer","notes":"无知识命中、无工具命中时应直接回答。"}
+{"caseId":"rag-001","type":"rag-answer","message":"第一版先做什么？","expectedPath":"retrieve-then-answer","notes":"需先写入项目知识，再验证 dense RAG 命中。"}
+{"caseId":"tool-001","type":"tool-answer","message":"现在几点了？","expectedPath":"tool-then-answer","notes":"时间类问题应命中内置 time 工具。"}
+{"caseId":"context-001","type":"long-context","message":"继续总结我们刚才关于 Context 管理的讨论","expectedPath":"direct-answer","notes":"多轮会话下应依赖 recent-summary 上下文策略保持连续性。"}

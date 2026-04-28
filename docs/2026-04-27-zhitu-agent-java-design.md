@@ -393,11 +393,11 @@ SSE 事件建议统一为：
 - Redis
 - PostgreSQL + pgvector
 
-## 13. 里程碑与提交节奏
+## 13. Task 与提交节奏
 
-为避免提交过碎，第一版控制为 4 个里程碑：
+为避免提交过碎，第一版控制为 4 个 Task：
 
-### M1 项目骨架 + 对话主链 + SSE
+### Task 1 项目骨架 + 对话主链 + SSE
 
 产出：
 
@@ -406,7 +406,7 @@ SSE 事件建议统一为：
 - `/api/chat`
 - `/api/streamChat`
 
-### M2 会话管理 + Redis 记忆 + 基础 Context 压缩
+### Task 2 会话管理 + Redis 记忆 + 基础 Context 压缩
 
 产出：
 
@@ -414,7 +414,7 @@ SSE 事件建议统一为：
 - Redis 消息存储
 - 最近消息 + 历史摘要压缩策略
 
-### M3 pgvector RAG + knowledge write + ToolUse
+### Task 3 pgvector RAG + knowledge write + ToolUse
 
 产出：
 
@@ -423,13 +423,13 @@ SSE 事件建议统一为：
 - `knowledge-write`
 - 2 到 3 个内置工具
 
-### M4 文档补全 + 第二版增强预埋点
+### Task 4 文档补全 + 第二版增强预埋点
 
 产出：
 
 - 接口文档
 - 设计文档补完
-- 为第二版预留 `retrievalMode`、`contextStrategy`、基础 trace 字段
+- 为第二版预留 `retrievalMode`、`contextStrategy`、`requestId`、`latencyMs`、`inputTokenEstimate`、`outputTokenEstimate` 等基础 trace 字段
 
 ## 14. 第二版增强方向
 

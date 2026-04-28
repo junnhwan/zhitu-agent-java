@@ -1,6 +1,6 @@
 # 开发进度
 
-最后更新时间：2026-04-27
+最后更新时间：2026-04-28
 当前分支：`main`
 
 ## 总体状态
@@ -13,8 +13,9 @@
 - 已完成：默认 in-memory、可选 Redis、可选 pgvector 的接口层骨架已经接好
 - 已完成：Redis 真实运行链路已经完成手工联调
 - 已完成：pgvector + embedding 的真实 dense retrieval 链路已经完成手工联调
+- 已完成：联调所需的最小日志与链路观测已补入
 - 部分完成：当前还没有接入 rerank，也没有混合检索
-- 未完成：trace、评估基线、第二阶段增强项还没有开始主实现
+- 未完成：rerank、hybrid retrieval 和第二阶段增强项还没有开始主实现
 
 ## 当前进展
 
@@ -24,6 +25,7 @@
 - 已完成：设计文档 `docs/2026-04-27-zhitu-agent-java-design.md`
 - 已完成：接口文档 `docs/2026-04-27-zhitu-agent-java-api.md`
 - 已完成：实现计划 `docs/2026-04-27-zhitu-agent-java-implementation-plan.md`
+- 已完成：文档术语已统一切到 `Task 1/2/3/4`，并明确当前仓库以后端链路为主
 
 ### Task 1：项目骨架、基础 API、SSE
 
@@ -154,6 +156,45 @@
   - `RedisInfrastructureWiringTest`
   - `PgVectorInfrastructureWiringTest`
 
+### 当前联调增强：最小日志与链路观测
+
+状态：已完成第一版
+
+已完成内容：
+
+- 已在 `RequestIdFilter` 中补充请求完成日志：
+  - `method`
+  - `path`
+  - `status`
+  - `requestId`
+  - `latencyMs`
+- 已在 `ChatController` 中补充聊天链路日志：
+  - 路由决策日志
+  - 普通对话完成日志
+  - SSE 完成 / 失败日志
+- 已在 `RagRetriever` 中补充检索日志：
+  - `resultCount`
+  - `topSource`
+  - `topScore`
+  - `queryPreview`
+- 已在 `LangChain4jLlmRuntime` 中补充模型运行日志：
+  - `provider`
+  - `messageCount`
+  - `model`
+  - `latencyMs`
+- 已在 `GlobalExceptionHandler` 中补充：
+  - 业务异常日志
+  - 参数校验异常日志
+  - 未预期异常日志
+
+已完成验证：
+
+- 已先写失败测试，再补实现：
+  - `HealthControllerTest`
+  - `ChatControllerTest`
+  - `LangChain4jLlmRuntimeTest`
+- 上述定向测试已恢复为绿色
+
 已完成验证：
 
 - `.\mvnw.cmd -Dtest=LangChain4jLlmRuntimeTest test` 已通过
@@ -234,8 +275,39 @@ pgvector 手工联调结果：
 - 第二阶段需要补：
   - rerank 主链接入
   - hybrid retrieval
-  - trace 字段增强
-  - baseline eval 文件与评估机制
+  - 更细粒度 trace 字段增强
+  - baseline eval 运行与评估机制
+
+## Task 4：trace 与评估基线
+
+状态：已完成
+
+已完成内容：
+
+- 已新增 `ChatTraceFactory`
+  - 将对外 trace 组装从 `ChatController` 中抽离
+- 已扩展 `TraceInfo` 返回字段：
+  - `retrievalMode`
+  - `contextStrategy`
+  - `requestId`
+  - `latencyMs`
+  - `snippetCount`
+  - `topSource`
+  - `topScore`
+  - `inputTokenEstimate`
+  - `outputTokenEstimate`
+- 已补充 baseline eval 文件：
+  - `src/test/resources/eval/baseline-chat-cases.jsonl`
+- 已创建根目录 `README.md`
+- 已将 API / 设计 / 实现计划文档同步到当前实现
+- 已新增定向测试：
+  - `ChatControllerTest`
+  - `BaselineEvalFixtureTest`
+
+已完成验证：
+
+- `.\mvnw.cmd -Dtest=ChatControllerTest,BaselineEvalFixtureTest test` 已通过
+- `.\mvnw.cmd test` 已通过
 
 ## 运行状态
 

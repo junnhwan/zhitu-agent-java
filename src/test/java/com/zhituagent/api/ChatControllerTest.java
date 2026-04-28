@@ -3,9 +3,12 @@ package com.zhituagent.api;
 import com.zhituagent.ZhituAgentApplication;
 import com.zhituagent.llm.LlmRuntime;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.http.MediaType;
 import org.springframework.context.annotation.Bean;
@@ -19,6 +22,7 @@ import java.util.function.Consumer;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
@@ -26,6 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(classes = {ZhituAgentApplication.class, ChatControllerTest.StubConfig.class})
 @AutoConfigureMockMvc
+@ExtendWith(OutputCaptureExtension.class)
 class ChatControllerTest {
 
     @Autowired
@@ -73,7 +78,16 @@ class ChatControllerTest {
                 .andExpect(jsonPath("$.answer").value("Mock answer"))
                 .andExpect(jsonPath("$.trace.path").value("direct-answer"))
                 .andExpect(jsonPath("$.trace.retrievalHit").value(false))
-                .andExpect(jsonPath("$.trace.toolUsed").value(false));
+                .andExpect(jsonPath("$.trace.toolUsed").value(false))
+                .andExpect(jsonPath("$.trace.retrievalMode").value("none"))
+                .andExpect(jsonPath("$.trace.contextStrategy").value("recent-summary"))
+                .andExpect(jsonPath("$.trace.requestId").isNotEmpty())
+                .andExpect(jsonPath("$.trace.latencyMs").isNumber())
+                .andExpect(jsonPath("$.trace.snippetCount").value(0))
+                .andExpect(jsonPath("$.trace.topSource").value(""))
+                .andExpect(jsonPath("$.trace.topScore").value(0.0))
+                .andExpect(jsonPath("$.trace.inputTokenEstimate").isNumber())
+                .andExpect(jsonPath("$.trace.outputTokenEstimate").isNumber());
     }
 
     @Test
@@ -96,5 +110,25 @@ class ChatControllerTest {
         assertThat(mvcResult.getResponse().getContentAsString(), containsString("event:start"));
         assertThat(mvcResult.getResponse().getContentAsString(), containsString("event:token"));
         assertThat(mvcResult.getResponse().getContentAsString(), containsString("event:complete"));
+        assertThat(mvcResult.getResponse().getContentAsString(), containsString("\"retrievalMode\":\"none\""));
+        assertThat(mvcResult.getResponse().getContentAsString(), containsString("\"contextStrategy\":\"recent-summary\""));
+        assertThat(mvcResult.getResponse().getContentAsString(), containsString("\"inputTokenEstimate\":"));
+        assertThat(mvcResult.getResponse().getContentAsString(), containsString("\"outputTokenEstimate\":"));
+    }
+
+    @Test
+    void shouldLogChatRouteDecision(CapturedOutput output) throws Exception {
+        mockMvc.perform(post("/api/chat")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "sess_10001",
+                                  "userId": "user_20001",
+                                  "message": "介绍一下第一版目标"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        assertThat(output).contains("chat.completed sessionId=sess_10001 path=direct-answer retrievalHit=false toolUsed=false");
     }
 }

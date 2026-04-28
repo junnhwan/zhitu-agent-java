@@ -2,22 +2,22 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a single-module Spring Boot Java Agent MVP that delivers session management, Redis-backed memory, pgvector RAG, SSE chat, LangChain4j-based ToolUse, and a glassmorphism-style demo console.
+**Goal:** Build a backend-first single-module Spring Boot Java Agent MVP that delivers session management, Redis-backed memory, pgvector RAG, SSE chat, and LangChain4j-based ToolUse.
 
-**Architecture:** Keep one explicit request chain: API -> session/memory -> context -> orchestrator -> RAG/tool/direct answer -> LLM runtime -> memory writeback. Use LangChain4j only for model, embedding, and vector integration; keep routing, context assembly, and tool orchestration in project code. Ship in four milestone-sized slices so each slice is independently runnable and easy to explain in a project retrospective.
+**Architecture:** Keep one explicit request chain: API -> session/memory -> context -> orchestrator -> RAG/tool/direct answer -> LLM runtime -> memory writeback. Use LangChain4j only for model, embedding, and vector integration; keep routing, context assembly, and tool orchestration in project code. Ship in four Task-sized slices so each slice is independently runnable and easy to explain in a project retrospective.
 
-**Tech Stack:** Java 21, Spring Boot 3.5.x, Spring MVC, LangChain4j 1.1.x, Redis, PostgreSQL + pgvector, Jackson, JUnit 5, Testcontainers, HTML/CSS/Vanilla JS
+**Tech Stack:** Java 21, Spring Boot 3.5.x, Spring MVC, LangChain4j 1.1.x, Redis, PostgreSQL + pgvector, Jackson, JUnit 5, Testcontainers
 
 ---
 
 ## 0. Prerequisites
 
 - [ ] Confirm JDK 21 is installed and available on `PATH`
-- [ ] Confirm Docker Desktop is available for local Redis and PostgreSQL + pgvector
 - [ ] Prepare model API keys and local `.env` or `application-local.yml`
-- [ ] If milestone commits matter, initialize git before implementation starts
+- [ ] Prepare Redis and PostgreSQL + pgvector access, either cloud-hosted or local
+- [ ] If Task commits matter, initialize git before implementation starts
 
-Recommended local services:
+Recommended runtime services:
 
 - Redis on `localhost:6379`
 - PostgreSQL + pgvector on `localhost:5432`
@@ -25,13 +25,11 @@ Recommended local services:
 Recommended local commands:
 
 ```powershell
-docker compose up -d
 .\mvnw.cmd test
 ```
 
 Expected:
 
-- Docker services are healthy
 - Maven test suite can run from project root
 
 ## 1. Planned File Layout
@@ -112,11 +110,10 @@ Expected:
 - Create: `src/main/java/com/zhituagent/rag/DocumentSplitter.java`
 - Create: `src/main/java/com/zhituagent/rag/EvidenceBlockFormatter.java`
 
-### 1.8 Demo frontend
+### 1.8 Frontend boundary note
 
-- Create: `src/main/resources/static/index.html`
-- Create: `src/main/resources/static/css/app.css`
-- Create: `src/main/resources/static/js/app.js`
+- No frontend implementation is owned by this backend execution plan
+- If another collaborator maintains a frontend, it should consume the documented backend APIs independently
 
 ### 1.9 Tests and fixtures
 
@@ -131,18 +128,18 @@ Expected:
 - Create: `src/test/java/com/zhituagent/rag/KnowledgeIngestServiceIntegrationTest.java`
 - Create: `src/test/resources/eval/baseline-chat-cases.jsonl`
 
-## 2. Milestone Commit Policy
+## 2. Task Commit Policy
 
 The user explicitly wants fewer commits. Follow this boundary:
 
-- Milestone 1 -> one main commit
-- Milestone 2 -> one main commit
-- Milestone 3 -> one main commit
-- Milestone 4 -> one main commit
+- Task 1 -> one main commit
+- Task 2 -> one main commit
+- Task 3 -> one main commit
+- Task 4 -> one main commit
 
-Inside each milestone, still work test-first where practical, but do not split into many tiny commits unless a change becomes risky.
+Inside each Task, still work test-first where practical, but do not split into many tiny commits unless a change becomes risky.
 
-## 3. Task 1: Bootstrap the app, API shell, SSE flow, and demo console
+## 3. Task 1: Bootstrap the app, API shell, and SSE flow
 
 **Files:**
 
@@ -166,16 +163,13 @@ Inside each milestone, still work test-first where practical, but do not split i
 - Create: `src/main/resources/application.yml`
 - Create: `src/main/resources/application-local.yml`
 - Create: `src/main/resources/system-prompt/chat-agent.txt`
-- Create: `src/main/resources/static/index.html`
-- Create: `src/main/resources/static/css/app.css`
-- Create: `src/main/resources/static/js/app.js`
 - Test: `src/test/java/com/zhituagent/api/HealthControllerTest.java`
 - Test: `src/test/java/com/zhituagent/api/SessionControllerTest.java`
 - Test: `src/test/java/com/zhituagent/api/ChatControllerTest.java`
 
 - [ ] **Step 1: Generate the Maven Spring Boot skeleton and dependency graph**
 
-Add only the dependencies needed for M1:
+Add only the dependencies needed for Task 1:
 
 - Spring Boot Web
 - Validation
@@ -196,7 +190,7 @@ Cover:
 - `POST /api/chat` returns a mock non-stream response
 - `POST /api/streamChat` emits `start`, at least one `token`, and `complete`
 
-Use a mocked `LlmRuntime` and a lightweight in-memory `SessionService` double so M1 does not depend on Redis yet.
+Use a mocked `LlmRuntime` and a lightweight in-memory `SessionService` double so Task 1 does not depend on Redis yet.
 
 Run:
 
@@ -224,49 +218,45 @@ Keep the first version of `LangChain4jLlmRuntime` narrow:
 - `String generate(...)`
 - `void stream(..., Consumer<String> onToken, Runnable onComplete)`
 
-- [ ] **Step 4: Build the demo console under static resources**
+- [ ] **Step 4: Verify the backend API shell manually**
 
-UI requirements:
+Manual check requirements:
 
-- glassmorphism-inspired layout with warm light background and azure accents
-- session sidebar
-- main chat panel
-- right-side trace/status panel
-- stream token rendering
-- session create/switch
+- `GET /api/healthz` returns `200`
+- `POST /api/sessions` creates a session
+- `POST /api/chat` returns a non-stream response
+- `POST /api/streamChat` emits incremental events
 
-Do not add build tooling. Keep it as static `HTML + CSS + JS`.
+Do not make a frontend a prerequisite for this Task.
 
-- [ ] **Step 5: Verify the milestone end-to-end**
+- [ ] **Step 5: Verify the Task end-to-end**
 
 Run:
 
 ```powershell
-docker compose up -d
 .\mvnw.cmd test
 .\mvnw.cmd spring-boot:run
 ```
 
 Manual check:
 
-- open `http://localhost:8080/`
-- create a session
-- send a message
-- confirm stream output renders incrementally
+- call `GET /api/healthz`
+- call `POST /api/sessions`
+- call `POST /api/chat`
+- call `POST /api/streamChat`
 
 Expected:
 
 - backend starts
-- static page loads
 - chat and stream endpoints behave according to the API doc
 
-- [ ] **Step 6: Commit milestone checkpoint**
+- [ ] **Step 6: Commit Task checkpoint**
 
 If git is initialized:
 
 ```powershell
 git add .
-git commit -m "feat: bootstrap java agent api and demo console"
+git commit -m "feat: bootstrap java agent api and sse flow"
 ```
 
 ## 4. Task 2: Add Redis session state, memory persistence, and base context compression
@@ -316,7 +306,7 @@ Use Redis for:
 - message list per `sessionId`
 - optional TTL for inactive sessions
 
-Do not overbuild locking in this milestone. Keep writes single-request safe first; only add minimal guards if tests expose a problem.
+Do not overbuild locking in this Task. Keep writes single-request safe first; only add minimal guards if tests expose a problem.
 
 - [ ] **Step 3: Implement first-pass context management**
 
@@ -345,12 +335,11 @@ Update chat flow so each request:
 - writes user and assistant messages back
 - updates session `updatedAt`
 
-- [ ] **Step 5: Verify the milestone**
+- [ ] **Step 5: Verify the Task**
 
 Run:
 
 ```powershell
-docker compose up -d
 .\mvnw.cmd test
 ```
 
@@ -365,9 +354,9 @@ Manual check:
 Expected:
 
 - multi-turn continuity works
-- no controller contract regresses from M1
+- no controller contract regresses from Task 1
 
-- [ ] **Step 6: Commit milestone checkpoint**
+- [ ] **Step 6: Commit Task checkpoint**
 
 If git is initialized:
 
@@ -433,7 +422,7 @@ Implement:
 - pgvector-backed retrieval
 - evidence formatter with `source`, `chunkId`, `score`, `content`
 
-Do not add rerank or hybrid retrieval in this milestone.
+Do not add rerank or hybrid retrieval in this Task.
 
 - [ ] **Step 3: Implement the explicit orchestrator**
 
@@ -443,7 +432,7 @@ Add one project-owned router that chooses between:
 - retrieve then answer
 - tool then answer
 
-Keep the decision policy simple and explainable. A lightweight classifier or rule-based heuristic is enough for M3.
+Keep the decision policy simple and explainable. A lightweight classifier or rule-based heuristic is enough for Task 3.
 
 - [ ] **Step 4: Implement built-in tools and wire ToolUse into the runtime**
 
@@ -455,12 +444,11 @@ Required tools:
 
 The `knowledge-write` tool must call the same ingest path as `POST /api/knowledge`, so the behavior stays consistent across API and tool execution.
 
-- [ ] **Step 5: Verify the milestone end-to-end**
+- [ ] **Step 5: Verify the Task end-to-end**
 
 Run:
 
 ```powershell
-docker compose up -d
 .\mvnw.cmd test
 .\mvnw.cmd spring-boot:run
 ```
@@ -478,7 +466,7 @@ Expected:
 - tools execute and return structured results
 - session continuity still works
 
-- [ ] **Step 6: Commit milestone checkpoint**
+- [ ] **Step 6: Commit Task checkpoint**
 
 If git is initialized:
 
@@ -528,7 +516,7 @@ Expose or internally preserve:
 - `toolUsed`
 - optional placeholders for `retrievalMode`, `contextStrategy`, and token estimates
 
-Do not build full metrics collection in this milestone. Only add stable response and internal fields that the second phase can reuse.
+Do not build full metrics collection in this Task. Only add stable response and internal fields that the second phase can reuse.
 
 - [ ] **Step 3: Create a baseline evaluation fixture**
 
@@ -549,9 +537,9 @@ Update:
 - design doc if implementation decisions drifted
 - API doc if request/response fields changed
 
-The docs at the end of M4 must match the running code, not the earlier design assumptions.
+The docs at the end of Task 4 must match the running code, not the earlier design assumptions.
 
-- [ ] **Step 5: Verify the milestone**
+- [ ] **Step 5: Verify the Task**
 
 Run:
 
@@ -561,7 +549,7 @@ Run:
 
 Manual check:
 
-- frontend status panel shows route and flags
+- chat responses and trace fields show route and flags
 - markdown docs reflect actual endpoint names and payloads
 
 Expected:
@@ -570,7 +558,7 @@ Expected:
 - docs match code
 - baseline fixture exists for second-phase optimization work
 
-- [ ] **Step 6: Commit milestone checkpoint**
+- [ ] **Step 6: Commit Task checkpoint**
 
 If git is initialized:
 
@@ -582,7 +570,6 @@ git commit -m "docs: align contracts and seed evaluation baseline"
 ## 7. Final Verification Checklist
 
 - [ ] `.\mvnw.cmd test` passes
-- [ ] `docker compose up -d` brings up Redis and PostgreSQL + pgvector
 - [ ] `.\mvnw.cmd spring-boot:run` starts the app cleanly
 - [ ] `GET /api/healthz` returns `200`
 - [ ] `POST /api/sessions` creates a session
@@ -591,7 +578,7 @@ git commit -m "docs: align contracts and seed evaluation baseline"
 - [ ] multi-turn session memory survives refresh/reload
 - [ ] `POST /api/knowledge` writes retrievable knowledge
 - [ ] at least one tool path executes successfully
-- [ ] static demo console renders and works on desktop and mobile widths
+- [ ] if a separate frontend exists, it can consume the backend contracts without backend-side assumptions
 
 ## 8. Out of Scope for This Plan
 
@@ -609,5 +596,5 @@ Do not add these during MVP execution unless the user explicitly expands scope:
 ## 9. Handoff Notes
 
 - The current workspace was not a git repository during planning, so commit steps are conditional.
-- Keep milestone scope disciplined. The value of this project is a clean, explainable Agent backbone, not breadth.
+- Keep Task scope disciplined. The value of this project is a clean, explainable Agent backbone, not breadth.
 - If implementation pressure rises, cut optional polish before cutting the six core capabilities.
