@@ -145,14 +145,52 @@
 - 还没有接入 provider 真实 tokenizer
 - 目前仍属于轻量估算策略，但已经足够支撑当前阶段的上下文实验
 
+## 0.4 最新进展补充（2026-04-28 收口）
+
+`Task 3` 与 `Task 4` 的剩余部分已经在这一轮收口，重点不是继续横向加模块，而是把“可验证、可展示、可接手”的闭环补完整。
+
+本轮新增：
+
+- `FactExtractor`
+  - 增加意图型误提取抑制
+  - 避免把“我是想问第一阶段先做什么”这类请求错提成稳定 facts
+- baseline eval fixture 新增：
+  - `context-budget-001`
+- `BaselineEvalCase / BaselineEvalResult / BaselineEvalRunner` 已支持记录：
+  - `expectedContextStrategy`
+  - `expectedFactCountAtLeast`
+  - `actualFactCount`
+  - `contextStrategyExpectationHitRate`
+  - `factExpectationHitRate`
+- `ContextManager`
+  - 默认 `maxInputTokens` 调整到 `640`
+  - 让默认链路更容易真实触发 budget-aware context 策略
+- 错误分类与展示资产补齐：
+  - `src/main/java/com/zhituagent/metrics/ErrorMetricsRecorder.java`
+  - `ApiErrorResponse.category`
+  - `GlobalExceptionHandler` 错误分类 metrics
+  - `docs/2026-04-28-zhitu-agent-java-observability.md`
+  - `docs/grafana/zhitu-agent-dashboard.json`
+  - `docs/2026-04-28-zhitu-agent-java-report-template.md`
+
+当前直接结论：
+
+- 深化优化阶段 `Task 1` 到 `Task 4` 第一轮已经全部完成
+- 当前仓库已经不仅能跑功能，也能产出：
+  - 多模式评估报告
+  - 上下文策略验证结果
+  - facts 命中验证结果
+  - Prometheus 指标与错误分类面板资产
+
 ## 1. 当前判断
 
-当前仓库已经完成两层交付：
+当前仓库已经完成三层交付：
 
 - 第一阶段 `Task 1` 到 `Task 4` 已全部完成，并已提交 `f5b66c3`
 - 第二阶段 `Task 1` 到 `Task 4` 第一版已全部完成，并已提交
   - `af79d94`
   - `3ccb902`
+- 第二阶段后的深化优化 `Task 1` 到 `Task 4` 第一轮也已完成
 
 当前系统已经具备：
 
@@ -167,6 +205,8 @@
 - `/actuator/health` 与 `/actuator/prometheus`
 - Redis 记忆压缩的最小并发保护
 - baseline eval 运行器第一版
+- facts 记忆与 budget-aware 上下文组装
+- 错误分类指标与展示模板
 
 因此，后续重点不再是“把功能补齐到能跑”，而是把系统继续升级成：
 
@@ -177,12 +217,12 @@
 
 ## 2. 主要差距
 
-虽然主链已经打通，但当前仍有几类明显差距：
+虽然主链和第二阶段后的第一轮深化优化都已经打通，但当前仍有几类明显差距：
 
-- 还没有基于真实模型和真实检索模式跑出正式的 A/B 对比报告
-- 记忆机制仍然停留在最小可用版 `summary + recent messages`
-- 上下文策略还没有按 token budget、重要性、主题做更细的裁剪
-- 可观测性已有 metrics 端点，但还没有 dashboard、错误分类、长期数据沉淀
+- 真实评估样本量还不够大，收益区间和副作用边界还需要继续固化
+- 记忆机制虽然已经升级到 `summary + recent messages + facts`，但还不是独立持久化、可演化的深记忆体系
+- 上下文策略已经 budget-aware，但还没有接入 provider 真实 tokenizer，也没有按主题/相关性进一步裁剪
+- 可观测性已经有 metrics、错误分类和 Grafana 模板，但还没有长期沉淀、报警与看板截图资产
 - 工具生态、MCP、多 Agent、自动热加载等扩展能力仍然属于后续项
 
 ## 3. 优化目标

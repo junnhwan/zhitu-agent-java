@@ -71,6 +71,8 @@
   - `docs/2026-04-27-zhitu-agent-java-api.md`
   - `docs/2026-04-27-zhitu-agent-java-implementation-plan.md`
   - `docs/2026-04-28-zhitu-agent-java-phase-two-plan.md`
+  - `docs/2026-04-28-zhitu-agent-java-observability.md`
+  - `docs/2026-04-28-zhitu-agent-java-report-template.md`
 - 需要默认知道：
   - 第一阶段 `Task 1` 到 `Task 4` 已全部完成
   - 真实 LLM 调用已接入
@@ -82,8 +84,13 @@
     - dense recall -> rerank
     - hybrid retrieval + 中文优化切分
     - Prometheus 指标 + Redis 记忆并发保护
-  - 当前下一步重点已转向第二阶段后的深化优化：
-    - 用真实 LLM 跑 baseline / A-B 评估
+  - 第二阶段后的深化优化 `Task 1` 到 `Task 4` 第一轮也已完成：
+    - 真实评估 runner 与多模式对比
+    - rerank 质量校准
+    - 轻量 facts 记忆 + budget-aware context
+    - Prometheus 指标说明、Grafana 模板、错误分类指标、报告模板
+  - 当前下一步重点已转向深化优化之后的持续提升：
+    - 用更多真实 LLM 评估结果固化收益与副作用边界
     - 继续增强 hybrid retrieval 与检索质量对比
     - 深化记忆机制与上下文压缩策略
     - 做更完整的指标看板与效果沉淀

@@ -31,7 +31,8 @@ http://localhost:8080/api
 {
   "code": "INVALID_ARGUMENT",
   "message": "sessionId is required",
-  "requestId": "req_20260427_xxx"
+  "requestId": "req_20260427_xxx",
+  "category": "validation"
 }
 ```
 
@@ -231,7 +232,7 @@ data: {"path":"tool-then-answer","retrievalHit":false,"toolUsed":true,"retrieval
 
 ```text
 event: error
-data: {"code":"LLM_CALL_FAILED","message":"model timeout"}
+data: {"code":"LLM_CALL_FAILED","message":"model timeout","category":"unexpected"}
 ```
 
 前端处理建议：
@@ -361,6 +362,20 @@ curl -N -X POST "http://localhost:8080/api/streamChat" ^
 ```
 
 ## 5. 错误码建议
+
+### 5.0 错误响应补充字段
+
+当前统一错误结构 `ApiErrorResponse` 额外返回：
+
+- `category`
+  - `business`
+    业务异常，例如会话不存在、消息为空、工具执行失败等
+  - `validation`
+    参数校验异常，例如缺字段、字段格式非法
+  - `unexpected`
+    未预期系统异常，例如运行时错误、未捕获异常
+
+这一字段同时会进入 Prometheus 指标 `zhitu_api_errors_total`，便于后续按类别做错误归因和面板统计。
 
 ### 5.1 参数与资源错误
 

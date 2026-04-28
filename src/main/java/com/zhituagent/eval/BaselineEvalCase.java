@@ -14,6 +14,8 @@ record BaselineEvalCase(
         boolean expectedRetrievalHit,
         boolean expectedToolUsed,
         boolean expectedSummaryPresentBeforeRun,
+        String expectedContextStrategy,
+        Integer expectedFactCountAtLeast,
         List<KnowledgeSeed> knowledgeEntries,
         List<HistoryTurn> historyTurns,
         Map<String, ModeExpectation> modeExpectations,

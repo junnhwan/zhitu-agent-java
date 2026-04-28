@@ -91,6 +91,20 @@ class BaselineEvalRunner {
                 .filter(BaselineEvalResult.CaseResult::topSourceCheckApplied)
                 .filter(BaselineEvalResult.CaseResult::topSourceMatched)
                 .count();
+        long contextStrategyCheckCount = results.stream()
+                .filter(BaselineEvalResult.CaseResult::contextStrategyCheckApplied)
+                .count();
+        long contextStrategyMatchedCount = results.stream()
+                .filter(BaselineEvalResult.CaseResult::contextStrategyCheckApplied)
+                .filter(BaselineEvalResult.CaseResult::contextStrategyMatched)
+                .count();
+        long factCheckCount = results.stream()
+                .filter(BaselineEvalResult.CaseResult::factCheckApplied)
+                .count();
+        long factMatchedCount = results.stream()
+                .filter(BaselineEvalResult.CaseResult::factCheckApplied)
+                .filter(BaselineEvalResult.CaseResult::factCountMatched)
+                .count();
         String resolvedReportMode = resolveReportMode(modeLabel, results);
 
         return new BaselineEvalResult(
@@ -104,6 +118,8 @@ class BaselineEvalRunner {
                 ratio(results.stream().filter(BaselineEvalResult.CaseResult::actualToolUsed).count(), results.size()),
                 ratio(results.stream().filter(BaselineEvalResult.CaseResult::summaryMatched).count(), results.size()),
                 ratio(topSourceMatchedCount, topSourceCheckCount),
+                ratio(contextStrategyMatchedCount, contextStrategyCheckCount),
+                ratio(factMatchedCount, factCheckCount),
                 average(results.stream().map(BaselineEvalResult.CaseResult::latencyMs).toList()),
                 percentile(results.stream().map(BaselineEvalResult.CaseResult::latencyMs).toList(), 0.50),
                 percentile(results.stream().map(BaselineEvalResult.CaseResult::latencyMs).toList(), 0.90),
@@ -148,6 +164,13 @@ class BaselineEvalRunner {
         String expectedTopSource = modeExpectation.expectedTopSource() == null ? "" : modeExpectation.expectedTopSource();
         boolean topSourceCheckApplied = !expectedTopSource.isBlank();
         boolean topSourceMatched = !topSourceCheckApplied || expectedTopSource.equals(response.trace().topSource());
+        String expectedContextStrategy = evalCase.expectedContextStrategy() == null ? "" : evalCase.expectedContextStrategy();
+        boolean contextStrategyCheckApplied = !expectedContextStrategy.isBlank();
+        boolean contextStrategyMatched = !contextStrategyCheckApplied || expectedContextStrategy.equals(response.trace().contextStrategy());
+        int expectedFactCountAtLeast = evalCase.expectedFactCountAtLeast() == null ? 0 : Math.max(0, evalCase.expectedFactCountAtLeast());
+        int actualFactCount = response.trace().factCount();
+        boolean factCheckApplied = evalCase.expectedFactCountAtLeast() != null;
+        boolean factCountMatched = !factCheckApplied || actualFactCount >= expectedFactCountAtLeast;
 
         return new BaselineEvalResult.CaseResult(
                 evalCase.caseId(),
@@ -168,8 +191,15 @@ class BaselineEvalRunner {
                 expectedTopSource,
                 topSourceCheckApplied,
                 topSourceMatched,
+                expectedContextStrategy,
                 response.trace().retrievalMode(),
                 response.trace().contextStrategy(),
+                contextStrategyCheckApplied,
+                contextStrategyMatched,
+                expectedFactCountAtLeast,
+                actualFactCount,
+                factCheckApplied,
+                factCountMatched,
                 response.trace().snippetCount(),
                 response.trace().retrievalCandidateCount(),
                 response.trace().topSource(),
@@ -289,7 +319,9 @@ class BaselineEvalRunner {
                 && result.retrievalMatched()
                 && result.toolMatched()
                 && result.summaryMatched()
-                && result.topSourceMatched();
+                && result.topSourceMatched()
+                && result.contextStrategyMatched()
+                && result.factCountMatched();
     }
 
     private double ratio(long numerator, long denominator) {

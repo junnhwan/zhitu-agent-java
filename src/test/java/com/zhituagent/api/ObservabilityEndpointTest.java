@@ -156,4 +156,33 @@ class ObservabilityEndpointTest {
 
         assertThat(response).contains("UP");
     }
+
+    @Test
+    void shouldExposeErrorClassificationMetrics() throws Exception {
+        mockMvc.perform(get("/api/sessions/{sessionId}", "sess_missing_for_metrics"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/chat")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "sess_invalid",
+                                  "userId": "metric_user_3",
+                                  "message": ""
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        String metrics = mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(metrics).contains("zhitu_api_errors_total");
+        assertThat(metrics).contains("category=\"business\"");
+        assertThat(metrics).contains("code=\"SESSION_NOT_FOUND\"");
+        assertThat(metrics).contains("category=\"validation\"");
+        assertThat(metrics).contains("code=\"INVALID_ARGUMENT\"");
+    }
 }

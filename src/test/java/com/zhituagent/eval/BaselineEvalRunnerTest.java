@@ -140,6 +140,11 @@ class BaselineEvalRunnerTest {
         assertThat(contextCase.path("summaryPresentBeforeRun").asBoolean()).isTrue();
         assertThat(contextCase.path("contextStrategy").asText()).isEqualTo("recent-summary");
 
+        JsonNode budgetedContextCase = findCase(reportJson, "context-budget-001");
+        assertThat(budgetedContextCase.path("summaryPresentBeforeRun").asBoolean()).isTrue();
+        assertThat(budgetedContextCase.path("contextStrategy").asText()).isEqualTo("recent-summary-facts-budgeted");
+        assertThat(budgetedContextCase.path("actualFactCount").asInt()).isGreaterThanOrEqualTo(1);
+
         assertThat(reportPath).exists();
         JsonNode writtenReport = objectMapper.readTree(Files.readString(reportPath));
         assertThat(writtenReport.path("totalCases").asInt()).isEqualTo(reportJson.path("totalCases").asInt());

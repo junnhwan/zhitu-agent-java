@@ -1,6 +1,7 @@
 package com.zhituagent.common.error;
 
 import com.zhituagent.api.dto.ApiErrorResponse;
+import com.zhituagent.metrics.ErrorMetricsRecorder;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,11 +16,17 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private final ErrorMetricsRecorder errorMetricsRecorder;
+
+    public GlobalExceptionHandler(ErrorMetricsRecorder errorMetricsRecorder) {
+        this.errorMetricsRecorder = errorMetricsRecorder;
+    }
 
     @ExceptionHandler(ApiException.class)
     @ResponseBody
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiErrorResponse handleApiException(ApiException exception, HttpServletRequest request) {
+        errorMetricsRecorder.recordError("business", exception.getErrorCode().name(), HttpStatus.BAD_REQUEST.value());
         log.warn(
                 "业务异常 api.error code={} requestId={} path={} message={}",
                 exception.getErrorCode().name(),
@@ -30,7 +37,8 @@ public class GlobalExceptionHandler {
         return new ApiErrorResponse(
                 exception.getErrorCode().name(),
                 exception.getMessage(),
-                (String) request.getAttribute("requestId")
+                (String) request.getAttribute("requestId"),
+                "business"
         );
     }
 
@@ -43,19 +51,21 @@ public class GlobalExceptionHandler {
                 .findFirst()
                 .map(error -> error.getField() + " " + error.getDefaultMessage())
                 .orElse("validation failed");
+        errorMetricsRecorder.recordError("validation", ErrorCode.INVALID_ARGUMENT.name(), HttpStatus.BAD_REQUEST.value());
         log.warn(
                 "参数校验异常 api.validation_error requestId={} path={} message={}",
                 request.getAttribute("requestId"),
                 request.getRequestURI(),
                 message
         );
-        return new ApiErrorResponse(ErrorCode.INVALID_ARGUMENT.name(), message, (String) request.getAttribute("requestId"));
+        return new ApiErrorResponse(ErrorCode.INVALID_ARGUMENT.name(), message, (String) request.getAttribute("requestId"), "validation");
     }
 
     @ExceptionHandler(Exception.class)
     @ResponseBody
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiErrorResponse handleUnexpectedException(Exception exception, HttpServletRequest request) {
+        errorMetricsRecorder.recordError("unexpected", ErrorCode.INTERNAL_ERROR.name(), HttpStatus.INTERNAL_SERVER_ERROR.value());
         log.error(
                 "未预期异常 api.unexpected_error requestId={} path={} message={}",
                 request.getAttribute("requestId"),
@@ -63,6 +73,6 @@ public class GlobalExceptionHandler {
                 exception.getMessage(),
                 exception
         );
-        return new ApiErrorResponse(ErrorCode.INTERNAL_ERROR.name(), exception.getMessage(), (String) request.getAttribute("requestId"));
+        return new ApiErrorResponse(ErrorCode.INTERNAL_ERROR.name(), exception.getMessage(), (String) request.getAttribute("requestId"), "unexpected");
     }
 }

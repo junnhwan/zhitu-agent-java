@@ -10,7 +10,7 @@ import java.util.List;
 @Component
 public class ContextManager {
 
-    private static final int DEFAULT_MAX_INPUT_TOKENS = 1200;
+    private static final int DEFAULT_MAX_INPUT_TOKENS = 640;
     private static final int DEFAULT_MAX_SUMMARY_TOKENS = 180;
     private static final int DEFAULT_MAX_FACTS_TOKENS = 120;
     private static final int DEFAULT_MAX_EVIDENCE_TOKENS = 240;

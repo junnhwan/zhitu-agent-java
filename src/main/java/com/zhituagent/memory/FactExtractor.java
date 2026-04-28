@@ -8,6 +8,18 @@ import java.util.Set;
 public class FactExtractor {
 
     private static final int MAX_FACTS = 6;
+    private static final List<String> INTENT_KEYWORDS = List.of(
+            "想问",
+            "请问",
+            "问一下",
+            "帮我",
+            "告诉我",
+            "介绍一下",
+            "总结一下",
+            "怎么看",
+            "怎么做",
+            "是什么"
+    );
 
     public List<String> extract(List<ChatMessageRecord> messages) {
         if (messages == null || messages.isEmpty()) {
@@ -50,6 +62,9 @@ public class FactExtractor {
         if (clause.endsWith("?") || clause.endsWith("？") || clause.endsWith("吗")) {
             return false;
         }
+        if (containsIntentKeyword(clause)) {
+            return false;
+        }
 
         String lowerCaseClause = clause.toLowerCase(Locale.ROOT);
         return clause.startsWith("我叫")
@@ -68,5 +83,9 @@ public class FactExtractor {
                 || lowerCaseClause.startsWith("i'm")
                 || lowerCaseClause.startsWith("i work")
                 || lowerCaseClause.startsWith("i live");
+    }
+
+    private boolean containsIntentKeyword(String clause) {
+        return INTENT_KEYWORDS.stream().anyMatch(clause::contains);
     }
 }

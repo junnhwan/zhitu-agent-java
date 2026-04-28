@@ -25,4 +25,16 @@ class FactExtractorTest {
                 "我在杭州做 Java Agent 后端开发"
         );
     }
+
+    @Test
+    void shouldIgnoreQuestionLikeIntentStatementsEvenIfTheyStartWithWoShi() {
+        FactExtractor extractor = new FactExtractor();
+
+        List<String> facts = extractor.extract(List.of(
+                new ChatMessageRecord("user", "我是想问第一阶段先做什么", OffsetDateTime.now()),
+                new ChatMessageRecord("user", "我叫小智", OffsetDateTime.now())
+        ));
+
+        assertThat(facts).containsExactly("我叫小智");
+    }
 }

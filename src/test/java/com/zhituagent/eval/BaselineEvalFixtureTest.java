@@ -26,7 +26,7 @@ class BaselineEvalFixtureTest {
                     .filter(line -> !line.isBlank())
                     .toList();
 
-            assertThat(lines).hasSizeGreaterThanOrEqualTo(6);
+            assertThat(lines).hasSizeGreaterThanOrEqualTo(7);
             assertThat(lines).allSatisfy(this::assertValidCase);
             assertThat(lines).anySatisfy(line -> assertThat(caseType(line)).isEqualTo("direct-answer"));
             assertThat(lines).anySatisfy(line -> assertThat(caseType(line)).isEqualTo("rag-answer"));
@@ -34,6 +34,7 @@ class BaselineEvalFixtureTest {
             assertThat(lines).anySatisfy(line -> assertThat(caseType(line)).isEqualTo("long-context"));
             assertThat(lines).anySatisfy(line -> assertThat(caseId(line)).isEqualTo("rag-rerank-001"));
             assertThat(lines).anySatisfy(line -> assertThat(caseId(line)).isEqualTo("rag-hybrid-001"));
+            assertThat(lines).anySatisfy(line -> assertThat(caseId(line)).isEqualTo("context-budget-001"));
         }
     }
 
@@ -47,6 +48,12 @@ class BaselineEvalFixtureTest {
             assertThat(node.path("expectedRetrievalHit").isBoolean()).isTrue();
             assertThat(node.path("expectedToolUsed").isBoolean()).isTrue();
             assertThat(node.path("expectedSummaryPresentBeforeRun").isBoolean()).isTrue();
+            if (node.has("expectedContextStrategy")) {
+                assertThat(node.path("expectedContextStrategy").asText()).isNotBlank();
+            }
+            if (node.has("expectedFactCountAtLeast")) {
+                assertThat(node.path("expectedFactCountAtLeast").canConvertToInt()).isTrue();
+            }
 
             if (node.has("knowledgeEntries")) {
                 assertThat(node.path("knowledgeEntries").isArray()).isTrue();
