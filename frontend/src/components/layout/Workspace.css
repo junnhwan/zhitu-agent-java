@@ -30,6 +30,20 @@
   background-clip: text;
 }
 
+.wk-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wk-header-facts {
+  display: flex; align-items: center; gap: 4px;
+  font-family: var(--mono); font-size: 0.72rem; color: var(--azure-deep);
+  background: var(--azure-glow);
+  padding: 4px 10px; border-radius: 6px;
+  cursor: default;
+}
+
 .wk-header-id {
   font-family: var(--mono);
   font-size: 0.72rem;

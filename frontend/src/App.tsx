@@ -7,22 +7,21 @@ import Workspace from "./components/layout/Workspace";
 import TracePanel from "./components/layout/TracePanel";
 import ChatPanel from "./components/chat/ChatPanel";
 import Composer from "./components/composer/Composer";
+import KnowledgeModal from "./components/knowledge/KnowledgeModal";
+import SettingsModal from "./components/knowledge/SettingsModal";
 import { appReducer, useSessionManager } from "./hooks/useSessionManager";
-import { useStreamingChat, type TraceDisplay } from "./hooks/useStreamingChat";
+import { useStreamingChat, emptyTraceDisplay, type TraceDisplay } from "./hooks/useStreamingChat";
 
 export default function App() {
   const [state, dispatch] = useReducer(appReducer, {
-    sessions: [] as { sessionId: string; userId: string; title: string; messages: never[] }[],
+    sessions: [] as import("./hooks/types").SessionState[],
     activeSessionId: null as string | null,
     sending: false,
   });
 
-  const [trace, setTrace] = useState<TraceDisplay>({
-    path: "direct-answer",
-    retrievalHit: false,
-    toolUsed: false,
-    status: "idle",
-  });
+  const [trace, setTrace] = useState<TraceDisplay>(emptyTraceDisplay());
+  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const { handleNewSession, handleSelectSession, restoreLastSession, getActiveSession } =
     useSessionManager(state, dispatch);
@@ -67,12 +66,15 @@ export default function App() {
             activeIdx={activeIdx}
             onNew={handleNewSession}
             onSelect={(i) => handleSelectSession(state.sessions[i].sessionId)}
+            onOpenKnowledge={() => setKnowledgeOpen(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
         }
         main={
           <Workspace
             title={activeSession?.title ?? "新对话"}
             sessionId={state.activeSessionId}
+            facts={activeSession?.facts ?? []}
           >
             <ChatPanel messages={activeSession?.messages ?? []} />
           </Workspace>
@@ -80,6 +82,8 @@ export default function App() {
         aside={<TracePanel trace={trace} />}
         composer={<Composer sending={state.sending} onSend={handleSend} />}
       />
+      <KnowledgeModal open={knowledgeOpen} onClose={() => setKnowledgeOpen(false)} />
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} sessionId={state.activeSessionId} />
     </>
   );
 }

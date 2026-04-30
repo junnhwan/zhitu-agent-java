@@ -7,22 +7,24 @@ export default function Sidebar({
   activeIdx,
   onNew,
   onSelect,
+  onOpenKnowledge,
+  onOpenSettings,
 }: {
   sessions: { sessionId: string; title: string }[];
   activeIdx: number;
   onNew: () => void;
   onSelect: (i: number) => void;
+  onOpenKnowledge: () => void;
+  onOpenSettings: () => void;
 }) {
   return (
     <>
-      {/* Brand logo */}
       <div className="nav-logo">
         <div className="nav-logo-dot" />
       </div>
 
       <div className="nav-divider" />
 
-      {/* Session icons — one per session, up to 5 shown */}
       <div className="nav-sessions">
         {sessions.slice(0, 5).map((s, i) => (
           <motion.button
@@ -42,7 +44,6 @@ export default function Sidebar({
       <div className="nav-spacer" />
       <div className="nav-divider" />
 
-      {/* Bottom actions */}
       <motion.button
         type="button"
         className="nav-icon-btn"
@@ -54,13 +55,27 @@ export default function Sidebar({
         <MessageSquarePlus size={22} />
       </motion.button>
 
-      <button type="button" className="nav-icon-btn ghost" title="知识库">
+      <motion.button
+        type="button"
+        className="nav-icon-btn ghost"
+        onClick={onOpenKnowledge}
+        title="知识库"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.92 }}
+      >
         <Layers size={20} />
-      </button>
+      </motion.button>
 
-      <button type="button" className="nav-icon-btn ghost" title="设置">
+      <motion.button
+        type="button"
+        className="nav-icon-btn ghost"
+        onClick={onOpenSettings}
+        title="运行配置"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.92 }}
+      >
         <Settings size={20} />
-      </button>
+      </motion.button>
 
       <SidebarStyles />
     </>
@@ -136,6 +151,7 @@ function SidebarStyles() {
       .nav-icon-btn:hover { background: rgba(255,255,255,0.5); color: var(--t2); }
       .nav-icon-btn.ghost { background: transparent; }
       .nav-icon-btn.ghost:hover { background: rgba(255,255,255,0.25); }
+      .nav-icon-btn.disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
     `}</style>
   );
 }

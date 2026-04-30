@@ -1,0 +1,81 @@
+.sm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(15,23,42,0.25);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sm-card {
+  width: 400px;
+  max-width: 90vw;
+  background: rgba(255,255,255,0.65);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255,255,255,0.5);
+  border-radius: var(--r-xl);
+  box-shadow: var(--s4), inset 0 1px 0 rgba(255,255,255,0.5);
+  overflow: hidden;
+  position: relative;
+}
+.sm-card::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 40%);
+  pointer-events: none;
+}
+
+.sm-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 22px 24px 0;
+  position: relative;
+}
+.sm-header h2 {
+  font-size: 1.1rem; font-weight: 800; letter-spacing: -0.02em;
+  background: var(--g-text);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.sm-close {
+  appearance: none; border: none; background: rgba(0,0,0,0.04);
+  width: 32px; height: 32px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--t3);
+  transition: all 0.2s;
+}
+.sm-close:hover { background: rgba(0,0,0,0.08); color: var(--t1); }
+
+.sm-body {
+  padding: 20px 24px 24px;
+  position: relative;
+}
+
+.sm-note {
+  font-size: 0.82rem; color: var(--t4); margin-bottom: 16px;
+}
+
+.sm-list {
+  display: flex; flex-direction: column; gap: 6px;
+}
+
+.sm-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.4);
+  border-radius: var(--r-sm);
+}
+
+.sm-item-left {
+  display: flex; align-items: center; gap: 8px; color: var(--t3);
+}
+
+.sm-item-label {
+  font-size: 0.82rem; font-weight: 600; color: var(--t2);
+}
+
+.sm-item-val {
+  font-family: var(--mono); font-size: 0.78rem; font-weight: 500;
+  color: var(--t3); max-width: 200px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

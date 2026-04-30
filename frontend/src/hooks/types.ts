@@ -3,6 +3,8 @@ export interface SessionState {
   userId: string;
   title: string;
   messages: MessageState[];
+  summary: string | null;
+  facts: string[];
 }
 
 export interface MessageState {

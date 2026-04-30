@@ -1,14 +1,16 @@
 import type { ReactNode } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Brain } from "lucide-react";
 import "./Workspace.css";
 
 export default function Workspace({
   title,
   sessionId,
+  facts,
   children,
 }: {
   title: string;
   sessionId: string | null;
+  facts: string[];
   children: ReactNode;
 }) {
   return (
@@ -18,12 +20,19 @@ export default function Workspace({
           <Sparkles size={18} className="wk-header-icon" />
           <h1 className="wk-header-title">{title}</h1>
         </div>
-        <span className="wk-header-id">{sessionId ? `#${sessionId.slice(0, 8)}` : ""}</span>
+        <div className="wk-header-right">
+          {facts.length > 0 && (
+            <span className="wk-header-facts" title={`${facts.length} 条记忆：\n${facts.join("\n")}`}>
+              <Brain size={13} />
+              {facts.length}
+            </span>
+          )}
+          <span className="wk-header-id">{sessionId ? `#${sessionId.slice(0, 8)}` : ""}</span>
+        </div>
       </header>
 
       <div className="wk-body">{children}</div>
 
-      {/* Composer dock area */}
       <div className="wk-composer-dock" />
     </>
   );

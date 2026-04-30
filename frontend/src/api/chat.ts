@@ -74,9 +74,22 @@ export function streamChat(
             case "complete":
               settled = true;
               callbacks.onComplete({
-                path: payload.path,
-                retrievalHit: payload.retrievalHit,
-                toolUsed: payload.toolUsed,
+                path: payload.path ?? "direct-answer",
+                retrievalHit: payload.retrievalHit ?? false,
+                toolUsed: payload.toolUsed ?? false,
+                retrievalMode: payload.retrievalMode ?? "dense",
+                contextStrategy: payload.contextStrategy ?? "recent-summary",
+                requestId: payload.requestId ?? "",
+                latencyMs: payload.latencyMs ?? 0,
+                snippetCount: payload.snippetCount ?? 0,
+                topSource: payload.topSource ?? "",
+                topScore: payload.topScore ?? 0,
+                retrievalCandidateCount: payload.retrievalCandidateCount ?? 0,
+                rerankModel: payload.rerankModel ?? "",
+                rerankTopScore: payload.rerankTopScore ?? 0,
+                factCount: payload.factCount ?? 0,
+                inputTokenEstimate: payload.inputTokenEstimate ?? 0,
+                outputTokenEstimate: payload.outputTokenEstimate ?? 0,
               } satisfies TraceInfo);
               break;
             case "error":

@@ -3,11 +3,31 @@ import { streamChat } from "../api/chat";
 import type { TraceInfo } from "../types/api";
 import type { AppAction } from "./useSessionManager";
 
-export interface TraceDisplay {
-  path: string;
-  retrievalHit: boolean;
-  toolUsed: boolean;
+export interface TraceDisplay extends TraceInfo {
   status: "idle" | "streaming" | "complete" | "error";
+}
+
+const emptyTrace: Omit<TraceDisplay, "status"> = {
+  path: "direct-answer",
+  retrievalHit: false,
+  toolUsed: false,
+  retrievalMode: "dense",
+  contextStrategy: "recent-summary",
+  requestId: "",
+  latencyMs: 0,
+  snippetCount: 0,
+  topSource: "",
+  topScore: 0,
+  retrievalCandidateCount: 0,
+  rerankModel: "",
+  rerankTopScore: 0,
+  factCount: 0,
+  inputTokenEstimate: 0,
+  outputTokenEstimate: 0,
+};
+
+export function emptyTraceDisplay(): TraceDisplay {
+  return { ...emptyTrace, status: "idle" };
 }
 
 export function useStreamingChat(
@@ -40,33 +60,24 @@ export function useStreamingChat(
 
   const send = useCallback(
     (sessionId: string, userId: string, message: string) => {
-      // Abort any in-flight stream
       abortRef.current?.abort();
       cancelAnimationFrame(rafRef.current);
 
       pendingContent.current = "";
       pendingSessionId.current = sessionId;
 
-      // Add user message
       dispatch({
         type: "ADD_MESSAGE",
-        payload: {
-          sessionId,
-          message: { role: "user", content: message },
-        },
+        payload: { sessionId, message: { role: "user", content: message } },
       });
 
-      // Add empty assistant placeholder
       dispatch({
         type: "ADD_MESSAGE",
-        payload: {
-          sessionId,
-          message: { role: "assistant", content: "", isStreaming: true },
-        },
+        payload: { sessionId, message: { role: "assistant", content: "", isStreaming: true } },
       });
 
       dispatch({ type: "SET_SENDING", payload: true });
-      onTraceChange({ path: "direct-answer", retrievalHit: false, toolUsed: false, status: "streaming" });
+      onTraceChange({ ...emptyTrace, status: "streaming" });
 
       const controller = streamChat(
         { sessionId, userId, message, metadata: { client: "web" } },
@@ -77,30 +88,23 @@ export function useStreamingChat(
             scheduleFlush();
           },
           onComplete: (trace: TraceInfo) => {
-            // Flush final content
             cancelAnimationFrame(rafRef.current);
-            const finalContent = pendingContent.current;
             dispatch({
               type: "FINALIZE_STREAMING_MESSAGE",
-              payload: { sessionId, content: finalContent },
+              payload: { sessionId, content: pendingContent.current },
             });
             dispatch({ type: "SET_SENDING", payload: false });
-            onTraceChange({
-              path: trace.path,
-              retrievalHit: trace.retrievalHit,
-              toolUsed: trace.toolUsed,
-              status: "complete",
-            });
+            onTraceChange({ ...trace, status: "complete" });
           },
-          onError: (code, msg) => {
+          onError: () => {
             cancelAnimationFrame(rafRef.current);
-            const finalContent = pendingContent.current || `Error: ${msg} (${code})`;
+            const finalContent = pendingContent.current || "生成失败，请重试";
             dispatch({
               type: "FINALIZE_STREAMING_MESSAGE",
               payload: { sessionId, content: finalContent },
             });
             dispatch({ type: "SET_SENDING", payload: false });
-            onTraceChange({ path: "direct-answer", retrievalHit: false, toolUsed: false, status: "error" });
+            onTraceChange({ ...emptyTrace, status: "error" });
           },
         },
       );

@@ -15,7 +15,7 @@ export type AppAction =
   | { type: "UPDATE_STREAMING_MESSAGE"; payload: { sessionId: string; content: string } }
   | { type: "FINALIZE_STREAMING_MESSAGE"; payload: { sessionId: string; content: string } }
   | { type: "SET_SENDING"; payload: boolean }
-  | { type: "LOAD_SESSION_HISTORY"; payload: { sessionId: string; messages: MessageState[] } }
+  | { type: "LOAD_SESSION_DETAIL"; payload: { sessionId: string; messages: MessageState[]; summary: string | null; facts: string[] } }
   | { type: "RESTORE_SESSION"; payload: SessionState };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -68,10 +68,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "SET_SENDING":
       return { ...state, sending: action.payload };
 
-    case "LOAD_SESSION_HISTORY": {
+    case "LOAD_SESSION_DETAIL": {
       const sessions = state.sessions.map((s) =>
         s.sessionId === action.payload.sessionId
-          ? { ...s, messages: action.payload.messages }
+          ? { ...s, messages: action.payload.messages, summary: action.payload.summary, facts: action.payload.facts }
           : s,
       );
       return { ...state, sessions };
@@ -99,6 +99,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
   }
 }
 
+function mapDetailToState(detail: { recentMessages: { role: string; content: string; timestamp: string }[]; summary: string | null; facts: string[] }) {
+  return {
+    messages: detail.recentMessages.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+      timestamp: m.timestamp,
+    })),
+    summary: detail.summary,
+    facts: detail.facts,
+  };
+}
+
 export function useSessionManager(
   state: AppState,
   dispatch: React.Dispatch<AppAction>,
@@ -113,9 +125,10 @@ export function useSessionManager(
       userId: resp.userId,
       title: resp.title,
       messages: [],
+      summary: null,
+      facts: [],
     };
     dispatch({ type: "ADD_SESSION", payload: session });
-    // Persist latest session id
     try { localStorage.setItem("zhitu_last_session", resp.sessionId); } catch { /* noop */ }
   }, [dispatch]);
 
@@ -123,25 +136,18 @@ export function useSessionManager(
     async (id: string) => {
       dispatch({ type: "SET_ACTIVE_SESSION", payload: id });
 
-      // Fetch history from backend for the target session
-      const target = state.sessions.find((s) => s.sessionId === id);
-      if (!target || target.messages.length > 0) return; // already loaded
-
+      // Always re-fetch from backend to get latest summary + facts + messages
       try {
         const detail = await getSession(id);
-        const messages: MessageState[] = detail.recentMessages.map((m) => ({
-          role: m.role,
-          content: m.content,
-          timestamp: m.timestamp,
-        }));
-        dispatch({ type: "LOAD_SESSION_HISTORY", payload: { sessionId: id, messages } });
+        const { messages, summary, facts } = mapDetailToState(detail);
+        dispatch({ type: "LOAD_SESSION_DETAIL", payload: { sessionId: id, messages, summary, facts } });
       } catch {
-        // Backend unavailable or session expired — leave messages empty
+        // Backend unavailable — keep whatever we have locally
       }
 
       try { localStorage.setItem("zhitu_last_session", id); } catch { /* noop */ }
     },
-    [dispatch, state.sessions],
+    [dispatch],
   );
 
   const restoreLastSession = useCallback(async (): Promise<boolean> => {
@@ -151,11 +157,7 @@ export function useSessionManager(
 
     try {
       const detail = await getSession(lastId);
-      const messages: MessageState[] = detail.recentMessages.map((m) => ({
-        role: m.role,
-        content: m.content,
-        timestamp: m.timestamp,
-      }));
+      const { messages, summary, facts } = mapDetailToState(detail);
       dispatch({
         type: "RESTORE_SESSION",
         payload: {
@@ -163,11 +165,12 @@ export function useSessionManager(
           userId: detail.session.userId,
           title: detail.session.title,
           messages,
+          summary,
+          facts,
         },
       });
       return true;
     } catch {
-      // Session expired or backend unreachable
       try { localStorage.removeItem("zhitu_last_session"); } catch { /* noop */ }
       return false;
     }

@@ -2,13 +2,15 @@ import type { ApiErrorResponse } from "../types/api";
 
 export class ApiError extends Error {
   code: string;
-  requestId: string | null;
+  requestId: string;
+  category: string;
 
-  constructor(code: string, message: string, requestId: string | null) {
+  constructor(code: string, message: string, requestId: string, category: string) {
     super(message);
     this.name = "ApiError";
     this.code = code;
     this.requestId = requestId;
+    this.category = category;
   }
 }
 
@@ -24,18 +26,20 @@ export async function request<T>(
   if (!res.ok) {
     let code = "UNKNOWN";
     let message = `HTTP ${res.status}`;
-    let requestId: string | null = null;
+    let requestId = "";
+    let category = "unexpected";
 
     try {
       const body = (await res.json()) as ApiErrorResponse;
       code = body.code ?? code;
       message = body.message ?? message;
-      requestId = body.requestId ?? null;
+      requestId = body.requestId ?? "";
+      category = body.category ?? category;
     } catch {
-      // body wasn't JSON, use defaults
+      // body wasn't JSON
     }
 
-    throw new ApiError(code, message, requestId);
+    throw new ApiError(code, message, requestId, category);
   }
 
   return res.json() as Promise<T>;

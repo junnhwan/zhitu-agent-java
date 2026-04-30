@@ -10,12 +10,7 @@ export interface SseTokenEvent {
   content: string;
 }
 
-export interface SseCompleteEvent {
-  type: "complete";
-  path: string;
-  retrievalHit: boolean;
-  toolUsed: boolean;
-}
+export type SseCompleteEvent = TraceInfo;
 
 export interface SseErrorEvent {
   type: "error";
