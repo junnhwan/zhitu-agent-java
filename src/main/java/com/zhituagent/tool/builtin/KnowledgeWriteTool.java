@@ -41,6 +41,13 @@ public class KnowledgeWriteTool implements ToolDefinition {
     }
 
     @Override
+    public boolean requiresApproval() {
+        // Writing to the knowledge store mutates retrieval results for every future
+        // chat turn — gate it behind explicit user approval.
+        return true;
+    }
+
+    @Override
     public ToolResult execute(Map<String, Object> arguments) {
         String question = asString(arguments.get("question"));
         String answer = asString(arguments.get("answer"));

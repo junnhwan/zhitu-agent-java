@@ -565,6 +565,56 @@ A-5 baseline 比对时打开此 flag,看那些 v1 检索 miss 的 case 是否被
 
 ---
 
+### HL.a ✅ HITL 后端审批门(2026-04-30 完成)
+
+**做了什么**
+
+把"危险工具(写知识库)直接由 LLM 调"升级为"LLM 提议 → 后端 park → 用户审批 → 第二轮请求带 token 才真执行"的两阶段。
+
+- `ToolDefinition.requiresApproval()` default false 接口加方法,`KnowledgeWriteTool` override 返回 true(写 KB 改未来检索结果,值得 gate)
+- 新增 `orchestrator/PendingToolCallStore`(@Component):内存 `ConcurrentHashMap<id, Entry>`,4 个状态 `PENDING / APPROVED / DENIED / CONSUMED`,15 分钟 TTL 懒清理。`consumeIfApproved(id)` 是 atomic check-and-flip(`AtomicBoolean` + `computeIfPresent`),保证一个 approval 只抵 1 次执行。
+- 新增 `orchestrator/PendingToolCall` record:暴露给 SSE 事件、HTTP API 与归档。
+- `ToolCallExecutor` 加 `executeAll(toolCalls, metadata)` overload + 内部 `checkApproval(...)`:
+  - 先看 `metadata.approvedToolCallId` → `consumeIfApproved` → 是 → 真执行
+  - 否则 `register` 新 pending → 返回 ToolResult(success=false, summary="awaiting_approval: ...", payload={pendingId, status: AWAITING_APPROVAL, toolName, arguments}),LLM 看到这条 observation 会知道 "我提议了写操作但还在等批准"
+- `AgentOrchestrator.decide(message, options, sessionMetadata)` 新 overload + 旧 overload delegate,`AgentLoop.run` 已经接收 metadata(SG 阶段加好的)→ 直接 forward 给 executor
+- `ChatService.chat` / `ChatController.streamChat` 调 decide 时把 `sessionId` 注入 metadata
+- 新增 `api/HitlController`:`GET /api/tool-calls/pending`、`GET /api/tool-calls/{id}`、`POST /api/tool-calls/{id}/approve`、`POST /api/tool-calls/{id}/deny`(approve/deny 在状态机不允许转移时返回 409)
+- `ChatController.streamChat` 在 SSE complete 之前,看 routeDecision 是否带 AWAITING_APPROVAL → 推一个 `tool_call_pending` SSE 事件(SseEventType 早就枚举了),前端可专门 hook 此事件弹审批面板
+
+**关键设计决策**
+
+1. **两阶段非阻塞** — 没让请求线程同步 wait approval(那会让 SSE 连接挂几十秒甚至超时)。LLM 见到 `awaiting_approval` observation 就当作"提议被记录,等用户批准",前端可拒可批,审批后用户再发同样 message + `metadata.approvedToolCallId=X`,后端跑通。Resume 协议简单 = "重发请求带 token",不需要后端持久化整段 chat state。简历可挂"参考 LangGraph interrupt + resume 思想,但用 stateless 重发实现,避开 server session 复杂度"。
+2. **single-use approval token** — `consumeIfApproved` 用 `AtomicBoolean` + `computeIfPresent` 做 atomic check-and-flip,APPROVED→CONSUMED 只成功 1 次。即使 token 泄露也不能被 replay。第一次 implementation 的 bug(返回当前 state 是 CONSUMED 而非"我刚刚翻转")在 PendingToolCallStoreTest 里被抓到,改完了。
+3. **15 分钟 TTL 懒清理** — 不起 ScheduledExecutor,在每次 `evictStale` 调用时一次性扫一下。memory 边界由 TTL + 自然消费保证。集群部署需要换 Redis,但 in-memory 足以撑 demo + 单 instance 部署,简历可写"interface clean enough to swap Redis when sharded"。
+4. **observation 用人话给 LLM** — `awaiting_approval: <id> — tool 'X' requires user approval...` 不只是错误码,是一句指令告诉 LLM "Resend with metadata.approvedToolCallId=<id>"。这是 OpenAI cookbook + Anthropic guide 推荐的"用 natural language 给 LLM 自纠"。
+5. **metadata 透传链 chat → orchestrator → executor** — 不用 ThreadLocal(并行 tool 执行 fan-out 时 ThreadLocal 不可见),全部走显式 method 参数,signature 越长但 propagation 路径可见。AgentOrchestrator 加 4-arg overload,旧 path delegate 到新 path,16 个集成测试不破。
+6. **HitlController 用 ResponseEntity 不用 @ResponseStatus 注解** — `approve` 在状态机失败时要返 409 而非 200,用 ResponseEntity 显式控制。HitlControllerTest 直接 instantiate controller 不走 MockMvc,跑得快。
+
+**改动文件**
+
+```
+新增   src/main/java/com/zhituagent/orchestrator/PendingToolCall.java
+新增   src/main/java/com/zhituagent/orchestrator/PendingToolCallStore.java
+新增   src/main/java/com/zhituagent/api/HitlController.java
+修改   src/main/java/com/zhituagent/tool/ToolDefinition.java               # +requiresApproval default false
+修改   src/main/java/com/zhituagent/tool/builtin/KnowledgeWriteTool.java    # override true
+修改   src/main/java/com/zhituagent/orchestrator/ToolCallExecutor.java     # +executeAll(metadata) +checkApproval
+修改   src/main/java/com/zhituagent/orchestrator/AgentOrchestrator.java    # +decide(msg,options,metadata)
+修改   src/main/java/com/zhituagent/orchestrator/AgentLoop.java            # forward metadata to executor
+修改   src/main/java/com/zhituagent/chat/ChatService.java                  # toolMetadata helper
+修改   src/main/java/com/zhituagent/api/ChatController.java                # buildToolMetadata + emitPendingApprovalIfNeeded
+新增   src/test/java/com/zhituagent/orchestrator/PendingToolCallStoreTest.java     # 6 cases
+新增   src/test/java/com/zhituagent/orchestrator/ToolCallApprovalGateTest.java     # 4 cases
+新增   src/test/java/com/zhituagent/api/HitlControllerTest.java                    # 5 cases
+```
+
+测试:`mvn -o test` 104/104 全绿(+15 新)。
+
+**HL.b(待续)**: 前端加 HitlConfirmPanel 监听 `tool_call_pending` SSE 事件,弹 modal 让用户审批/拒绝,审批后重发 chat with `metadata.approvedToolCallId`。abort 接 Composer 也归到 HL.b(useStreamingChat.abort 已有,Composer 加 Stop 按钮即可)。
+
+---
+
 ## 阶段 2 — 差异化亮点(待开始)
 
 7 个子任务,任挑两三个写进简历即可:
@@ -572,6 +622,7 @@ A-5 baseline 比对时打开此 flag,看那些 v1 检索 miss 的 case 是否被
 - ✅ Anthropic Contextual Retrieval + 真 BM25 + RRF — 见 CR-1 段落(CR-2 真 BM25 推迟)
 - ✅ Self-RAG / CRAG 检索充分性评估 — 见 SR 段落
 - ✅ Trace 升 span 树 + 前端 TraceTree(LangSmith 对标)— 见 T2 段落
+- ✅ HITL(Anthropic computer use 对标)— 见 HL.a 段落,前端 HL.b 待补
 - MemGPT / Mem0 风格 memory(LLM 抽取 + add/update/merge + reflection)
 - MCP 客户端
 - HITL(@RequireApproval + SSE tool_call_pending)

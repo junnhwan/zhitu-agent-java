@@ -76,14 +76,22 @@ public class AgentOrchestrator {
     }
 
     public RouteDecision decide(String userMessage) {
-        return decide(userMessage, RetrievalRequestOptions.defaults());
+        return decide(userMessage, RetrievalRequestOptions.defaults(), Map.of());
     }
 
     public RouteDecision decide(String userMessage, RetrievalMode retrievalMode) {
-        return decide(userMessage, RetrievalRequestOptions.withMode(retrievalMode));
+        return decide(userMessage, RetrievalRequestOptions.withMode(retrievalMode), Map.of());
     }
 
     public RouteDecision decide(String userMessage, RetrievalRequestOptions retrievalOptions) {
+        return decide(userMessage, retrievalOptions, Map.of());
+    }
+
+    public RouteDecision decide(String userMessage,
+                                RetrievalRequestOptions retrievalOptions,
+                                Map<String, Object> sessionMetadata) {
+        Map<String, Object> safeMetadata = sessionMetadata == null ? Map.of() : sessionMetadata;
+
         RagRetrievalResult retrievalResult = retrieveWithOptionalSelfRag(userMessage, retrievalOptions);
         if (!retrievalResult.snippets().isEmpty()) {
             return RouteDecision.retrieval(retrievalResult);
@@ -104,7 +112,7 @@ public class AgentOrchestrator {
             return RouteDecision.direct();
         }
 
-        List<ToolCallExecutor.ToolExecution> executions = toolCallExecutor.executeAll(turn.toolCalls());
+        List<ToolCallExecutor.ToolExecution> executions = toolCallExecutor.executeAll(turn.toolCalls(), safeMetadata);
         if (executions.isEmpty()) {
             return RouteDecision.direct();
         }

@@ -120,7 +120,7 @@ public class ChatService {
 
             String routeSpan = spanCollector.startSpan("orchestrator.decide", "route");
             try {
-                routeDecision = agentOrchestrator.decide(message, safeOptions);
+                routeDecision = agentOrchestrator.decide(message, safeOptions, toolMetadata(sessionId, safeMetadata));
             } finally {
                 spanCollector.endSpan(routeSpan, "ok", Map.of(
                         "path", routeDecision == null ? "direct-answer" : routeDecision.path(),
@@ -262,6 +262,15 @@ public class ChatService {
         if (routeDecision != null && routeDecision.toolUsed()) {
             toolMetricsRecorder.recordInvocation(routeDecision.toolName(), true);
         }
+    }
+
+    private Map<String, Object> toolMetadata(String sessionId, Map<String, Object> chatMetadata) {
+        Map<String, Object> merged = new java.util.HashMap<>();
+        if (chatMetadata != null) {
+            merged.putAll(chatMetadata);
+        }
+        merged.put(com.zhituagent.orchestrator.ToolCallExecutor.METADATA_SESSION_ID, sessionId == null ? "" : sessionId);
+        return merged;
     }
 
     private void logRouteDecision(String requestId, String sessionId, RouteDecision routeDecision) {

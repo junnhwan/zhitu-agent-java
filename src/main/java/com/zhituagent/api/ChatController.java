@@ -102,7 +102,11 @@ public class ChatController {
         String requestId = requestIdOf(servletRequest);
         sessionService.ensureSession(request.sessionId(), request.userId());
         sessionService.appendMessage(request.sessionId(), request.userId(), "user", request.message());
-        RouteDecision routeDecision = agentOrchestrator.decide(request.message());
+        RouteDecision routeDecision = agentOrchestrator.decide(
+                request.message(),
+                com.zhituagent.rag.RetrievalRequestOptions.defaults(),
+                buildToolMetadata(request)
+        );
         recordToolMetric(routeDecision);
         logRouteDecision("chat.stream.route.selected", requestId, request.sessionId(), routeDecision);
         ContextBundle contextBundle = contextManager.build(
@@ -167,6 +171,7 @@ public class ChatController {
                                         latencyMs
                                 );
                                 chatMetricsRecorder.recordRequest(routeDecision.path(), true, true, latencyMs);
+                                emitPendingApprovalIfNeeded(emitter, routeDecision);
                                 emitter.send(SseEmitter.event()
                                         .name(SseEventType.COMPLETE.value())
                                         .data(writeJson(traceInfo)));
@@ -279,5 +284,36 @@ public class ChatController {
 
     private long elapsedMillis(long startNanos) {
         return (System.nanoTime() - startNanos) / 1_000_000;
+    }
+
+    private Map<String, Object> buildToolMetadata(ChatRequest request) {
+        Map<String, Object> merged = new java.util.HashMap<>();
+        if (request.metadata() != null) {
+            merged.putAll(request.metadata());
+        }
+        merged.put(com.zhituagent.orchestrator.ToolCallExecutor.METADATA_SESSION_ID,
+                request.sessionId() == null ? "" : request.sessionId());
+        return merged;
+    }
+
+    private void emitPendingApprovalIfNeeded(SseEmitter emitter, RouteDecision routeDecision) {
+        if (routeDecision == null || !routeDecision.toolUsed() || routeDecision.toolResult() == null) {
+            return;
+        }
+        Map<String, Object> payload = routeDecision.toolResult().payload();
+        if (payload == null) {
+            return;
+        }
+        Object status = payload.get("status");
+        if (!"AWAITING_APPROVAL".equals(status)) {
+            return;
+        }
+        try {
+            emitter.send(SseEmitter.event()
+                    .name(SseEventType.TOOL_CALL_PENDING.value())
+                    .data(writeJson(payload)));
+        } catch (IOException ignored) {
+            // Pending notification is best-effort; the trace also carries the same payload.
+        }
     }
 }

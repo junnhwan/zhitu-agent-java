@@ -9,10 +9,12 @@ import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -27,6 +29,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * captured failures are returned to the caller so they can be replayed back to
  * the LLM as observations (the "tool error fallback" pattern from the OpenAI
  * cookbook / Anthropic tool-use guide).
+ *
+ * <p>Tools that opt into {@link ToolDefinition#requiresApproval()} go through a
+ * Human-in-the-Loop gate: on first sight the call is parked in
+ * {@link PendingToolCallStore} and the caller receives an
+ * {@code awaiting_approval} observation; the same tool call only runs when the
+ * caller resends the chat with {@code metadata.approvedToolCallId} set to a
+ * previously-approved entry.
  */
 @Component
 public class ToolCallExecutor {
@@ -35,24 +44,39 @@ public class ToolCallExecutor {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> ARG_MAP_TYPE = new TypeReference<>() {
     };
+    public static final String METADATA_APPROVED_ID = "approvedToolCallId";
+    public static final String METADATA_SESSION_ID = "sessionId";
+    public static final String AWAITING_APPROVAL_SUMMARY_PREFIX = "awaiting_approval: ";
 
     private final ToolRegistry toolRegistry;
+    private final PendingToolCallStore pendingToolCallStore;
     private final ExecutorService executor;
     private final LoopDetector loopDetector = new LoopDetector();
 
-    public ToolCallExecutor(ToolRegistry toolRegistry) {
+    @Autowired
+    public ToolCallExecutor(ToolRegistry toolRegistry, PendingToolCallStore pendingToolCallStore) {
         this.toolRegistry = toolRegistry;
+        this.pendingToolCallStore = pendingToolCallStore;
         this.executor = Executors.newFixedThreadPool(4, namedThreadFactory("tool-exec"));
     }
 
+    public ToolCallExecutor(ToolRegistry toolRegistry) {
+        this(toolRegistry, new PendingToolCallStore());
+    }
+
     public List<ToolExecution> executeAll(List<ToolExecutionRequest> toolCalls) {
+        return executeAll(toolCalls, Map.of());
+    }
+
+    public List<ToolExecution> executeAll(List<ToolExecutionRequest> toolCalls, Map<String, Object> metadata) {
         if (toolCalls == null || toolCalls.isEmpty()) {
             return List.of();
         }
+        Map<String, Object> safeMetadata = metadata == null ? Map.of() : metadata;
 
         List<CompletableFuture<ToolExecution>> futures = new ArrayList<>(toolCalls.size());
         for (ToolExecutionRequest request : toolCalls) {
-            futures.add(CompletableFuture.supplyAsync(() -> executeOne(request), executor));
+            futures.add(CompletableFuture.supplyAsync(() -> executeOne(request, safeMetadata), executor));
         }
 
         CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[0])).join();
@@ -64,7 +88,7 @@ public class ToolCallExecutor {
         return List.copyOf(results);
     }
 
-    private ToolExecution executeOne(ToolExecutionRequest request) {
+    private ToolExecution executeOne(ToolExecutionRequest request, Map<String, Object> metadata) {
         String name = request.name();
         ToolDefinition tool = toolRegistry.find(name).orElse(null);
         if (tool == null) {
@@ -103,6 +127,13 @@ public class ToolCallExecutor {
             return new ToolExecution(request, invalid);
         }
 
+        if (tool.requiresApproval()) {
+            ApprovalOutcome outcome = checkApproval(name, request.arguments(), arguments, metadata);
+            if (outcome.pending() != null) {
+                return new ToolExecution(request, outcome.observation());
+            }
+        }
+
         try {
             ToolResult result = tool.execute(arguments);
             return new ToolExecution(request, result);
@@ -116,6 +147,46 @@ public class ToolCallExecutor {
             );
             return new ToolExecution(request, failure);
         }
+    }
+
+    private ApprovalOutcome checkApproval(String toolName,
+                                          String rawArguments,
+                                          Map<String, Object> arguments,
+                                          Map<String, Object> metadata) {
+        String approvedId = stringValue(metadata, METADATA_APPROVED_ID);
+        if (approvedId != null && pendingToolCallStore.consumeIfApproved(approvedId)) {
+            log.info("HITL approval consumed chat.tool.approval.consumed name={} pendingId={}", toolName, approvedId);
+            return ApprovalOutcome.proceed();
+        }
+        String sessionId = stringValue(metadata, METADATA_SESSION_ID);
+        PendingToolCall pending = pendingToolCallStore.register(sessionId, toolName, rawArguments, arguments);
+        log.info("HITL approval requested chat.tool.approval.requested name={} pendingId={} sessionId={}", toolName, pending.id(), sessionId);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("pendingId", pending.id());
+        payload.put("status", "AWAITING_APPROVAL");
+        payload.put("toolName", toolName);
+        payload.put("arguments", arguments);
+        ToolResult observation = new ToolResult(
+                toolName,
+                false,
+                AWAITING_APPROVAL_SUMMARY_PREFIX + pending.id() + " — tool '" + toolName
+                        + "' requires user approval before execution. Resend the request with metadata.approvedToolCallId="
+                        + pending.id() + " after the user approves.",
+                payload
+        );
+        return ApprovalOutcome.awaiting(pending, observation);
+    }
+
+    private static String stringValue(Map<String, Object> metadata, String key) {
+        if (metadata == null) {
+            return null;
+        }
+        Object value = metadata.get(key);
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
     }
 
     private Map<String, Object> parseArguments(String json) {
@@ -145,5 +216,15 @@ public class ToolCallExecutor {
     }
 
     public record ToolExecution(ToolExecutionRequest request, ToolResult result) {
+    }
+
+    private record ApprovalOutcome(PendingToolCall pending, ToolResult observation) {
+        static ApprovalOutcome proceed() {
+            return new ApprovalOutcome(null, null);
+        }
+
+        static ApprovalOutcome awaiting(PendingToolCall pending, ToolResult observation) {
+            return new ApprovalOutcome(pending, observation);
+        }
     }
 }

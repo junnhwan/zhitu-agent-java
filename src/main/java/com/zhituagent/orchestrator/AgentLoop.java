@@ -112,7 +112,7 @@ public class AgentLoop {
                 ));
                 List<ToolCallExecutor.ToolExecution> executions;
                 try {
-                    executions = toolCallExecutor.executeAll(turn.toolCalls());
+                    executions = toolCallExecutor.executeAll(turn.toolCalls(), metadata);
                 } finally {
                     spanCollector.endSpan(toolSpan, "ok", Map.of("executedCount", turn.toolCalls().size()));
                 }
