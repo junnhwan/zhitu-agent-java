@@ -19,6 +19,8 @@ record BaselineEvalCase(
         List<KnowledgeSeed> knowledgeEntries,
         List<HistoryTurn> historyTurns,
         Map<String, ModeExpectation> modeExpectations,
+        List<String> relevantSourceIds,
+        List<String> expectedAnswerKeywords,
         String notes
 ) {
 
@@ -26,6 +28,8 @@ record BaselineEvalCase(
         knowledgeEntries = knowledgeEntries == null ? List.of() : List.copyOf(knowledgeEntries);
         historyTurns = historyTurns == null ? List.of() : List.copyOf(historyTurns);
         modeExpectations = modeExpectations == null ? Map.of() : Map.copyOf(modeExpectations);
+        relevantSourceIds = relevantSourceIds == null ? List.of() : List.copyOf(relevantSourceIds);
+        expectedAnswerKeywords = expectedAnswerKeywords == null ? List.of() : List.copyOf(expectedAnswerKeywords);
     }
 
     ModeExpectation modeExpectationFor(String mode) {

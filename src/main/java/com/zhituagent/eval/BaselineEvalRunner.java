@@ -24,6 +24,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
+import java.util.function.ToDoubleFunction;
 
 @Component
 class BaselineEvalRunner {
@@ -105,6 +107,22 @@ class BaselineEvalRunner {
                 .filter(BaselineEvalResult.CaseResult::factCheckApplied)
                 .filter(BaselineEvalResult.CaseResult::factCountMatched)
                 .count();
+        int rankingCheckedCases = (int) results.stream()
+                .filter(BaselineEvalResult.CaseResult::rankingCheckApplied)
+                .count();
+        int keywordCheckedCases = (int) results.stream()
+                .filter(BaselineEvalResult.CaseResult::keywordCheckApplied)
+                .count();
+        double meanHitAt5 = meanOverApplied(results, BaselineEvalResult.CaseResult::rankingCheckApplied,
+                result -> result.hitAt5() ? 1.0 : 0.0);
+        double meanRecallAt5 = meanOverApplied(results, BaselineEvalResult.CaseResult::rankingCheckApplied,
+                BaselineEvalResult.CaseResult::recallAt5);
+        double meanMrrAt5 = meanOverApplied(results, BaselineEvalResult.CaseResult::rankingCheckApplied,
+                BaselineEvalResult.CaseResult::mrrAt5);
+        double meanNdcgAt5 = meanOverApplied(results, BaselineEvalResult.CaseResult::rankingCheckApplied,
+                BaselineEvalResult.CaseResult::ndcgAt5);
+        double meanAnswerKeywordCoverage = meanOverApplied(results, BaselineEvalResult.CaseResult::keywordCheckApplied,
+                BaselineEvalResult.CaseResult::answerKeywordCoverage);
         String resolvedReportMode = resolveReportMode(modeLabel, results);
 
         return new BaselineEvalResult(
@@ -125,6 +143,13 @@ class BaselineEvalRunner {
                 percentile(results.stream().map(BaselineEvalResult.CaseResult::latencyMs).toList(), 0.90),
                 average(results.stream().map(BaselineEvalResult.CaseResult::inputTokenEstimate).toList()),
                 average(results.stream().map(BaselineEvalResult.CaseResult::outputTokenEstimate).toList()),
+                meanHitAt5,
+                meanRecallAt5,
+                meanMrrAt5,
+                meanNdcgAt5,
+                meanAnswerKeywordCoverage,
+                rankingCheckedCases,
+                keywordCheckedCases,
                 List.copyOf(results)
         );
     }
@@ -172,6 +197,29 @@ class BaselineEvalRunner {
         boolean factCheckApplied = evalCase.expectedFactCountAtLeast() != null;
         boolean factCountMatched = !factCheckApplied || actualFactCount >= expectedFactCountAtLeast;
 
+        List<String> retrievedSources = response.trace().retrievedSources();
+        List<String> relevantSourceIds = evalCase.relevantSourceIds();
+        boolean rankingCheckApplied = !relevantSourceIds.isEmpty();
+        Set<String> relevantSet = rankingCheckApplied
+                ? Set.copyOf(relevantSourceIds)
+                : Set.of();
+        boolean hitAt5 = rankingCheckApplied && RankingMetrics.hitAtK(retrievedSources, relevantSet, 5);
+        double recallAt5 = rankingCheckApplied
+                ? RankingMetrics.recallAtK(retrievedSources, relevantSet, 5)
+                : 0.0;
+        double mrrAt5 = rankingCheckApplied
+                ? RankingMetrics.mrrAtK(retrievedSources, relevantSet, 5)
+                : 0.0;
+        double ndcgAt5 = rankingCheckApplied
+                ? RankingMetrics.ndcgAtK(retrievedSources, relevantSet, 5)
+                : 0.0;
+
+        List<String> expectedAnswerKeywords = evalCase.expectedAnswerKeywords();
+        boolean keywordCheckApplied = !expectedAnswerKeywords.isEmpty();
+        double answerKeywordCoverage = keywordCheckApplied
+                ? RankingMetrics.keywordCoverage(response.answer(), expectedAnswerKeywords)
+                : 0.0;
+
         return new BaselineEvalResult.CaseResult(
                 evalCase.caseId(),
                 evalCase.type(),
@@ -209,7 +257,17 @@ class BaselineEvalRunner {
                 response.trace().latencyMs(),
                 response.trace().inputTokenEstimate(),
                 response.trace().outputTokenEstimate(),
-                preview(response.answer())
+                preview(response.answer()),
+                relevantSourceIds,
+                retrievedSources,
+                rankingCheckApplied,
+                hitAt5,
+                recallAt5,
+                mrrAt5,
+                ndcgAt5,
+                expectedAnswerKeywords,
+                keywordCheckApplied,
+                answerKeywordCoverage
         );
     }
 
@@ -329,6 +387,21 @@ class BaselineEvalRunner {
             return 0.0;
         }
         return numerator / (double) denominator;
+    }
+
+    private double meanOverApplied(List<BaselineEvalResult.CaseResult> results,
+                                   Predicate<BaselineEvalResult.CaseResult> applied,
+                                   ToDoubleFunction<BaselineEvalResult.CaseResult> value) {
+        double sum = 0.0;
+        long count = 0L;
+        for (BaselineEvalResult.CaseResult result : results) {
+            if (!applied.test(result)) {
+                continue;
+            }
+            sum += value.applyAsDouble(result);
+            count++;
+        }
+        return count == 0L ? 0.0 : sum / count;
     }
 
     private double average(List<Long> values) {

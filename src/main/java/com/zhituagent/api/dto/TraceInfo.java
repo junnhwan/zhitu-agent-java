@@ -1,5 +1,7 @@
 package com.zhituagent.api.dto;
 
+import java.util.List;
+
 public record TraceInfo(
         String path,
         boolean retrievalHit,
@@ -16,6 +18,11 @@ public record TraceInfo(
         double rerankTopScore,
         int factCount,
         long inputTokenEstimate,
-        long outputTokenEstimate
+        long outputTokenEstimate,
+        List<String> retrievedSources
 ) {
+
+    public TraceInfo {
+        retrievedSources = retrievedSources == null ? List.of() : List.copyOf(retrievedSources);
+    }
 }

@@ -38,6 +38,9 @@ public class ChatTraceFactory {
         List<String> inputMessages = contextBundle == null ? List.of() : contextBundle.modelMessages();
         long inputTokenEstimate = tokenEstimator.estimateMessages(inputMessages);
         long outputTokenEstimate = tokenEstimator.estimateText(outputText);
+        List<String> retrievedSources = snippets.stream()
+                .map(KnowledgeSnippet::source)
+                .toList();
 
         return new TraceInfo(
                 routeDecision == null ? DEFAULT_PATH : routeDecision.path(),
@@ -57,7 +60,8 @@ public class ChatTraceFactory {
                 routeDecision == null ? 0.0 : routeDecision.rerankTopScore(),
                 contextBundle == null || contextBundle.facts() == null ? 0 : Math.max(0, contextBundle.facts().size()),
                 inputTokenEstimate,
-                outputTokenEstimate
+                outputTokenEstimate,
+                retrievedSources
         );
     }
 

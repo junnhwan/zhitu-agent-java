@@ -20,6 +20,13 @@ record BaselineEvalResult(
         double p90LatencyMs,
         double averageInputTokenEstimate,
         double averageOutputTokenEstimate,
+        double meanHitAt5,
+        double meanRecallAt5,
+        double meanMrrAt5,
+        double meanNdcgAt5,
+        double meanAnswerKeywordCoverage,
+        int rankingCheckedCases,
+        int keywordCheckedCases,
         List<CaseResult> results
 ) {
 
@@ -60,7 +67,17 @@ record BaselineEvalResult(
             long latencyMs,
             long inputTokenEstimate,
             long outputTokenEstimate,
-            String answerPreview
+            String answerPreview,
+            List<String> relevantSourceIds,
+            List<String> retrievedSources,
+            boolean rankingCheckApplied,
+            boolean hitAt5,
+            double recallAt5,
+            double mrrAt5,
+            double ndcgAt5,
+            List<String> expectedAnswerKeywords,
+            boolean keywordCheckApplied,
+            double answerKeywordCoverage
     ) {
     }
 }
