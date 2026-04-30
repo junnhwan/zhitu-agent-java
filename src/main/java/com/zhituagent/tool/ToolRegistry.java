@@ -1,5 +1,6 @@
 package com.zhituagent.tool;
 
+import dev.langchain4j.agent.tool.ToolSpecification;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -25,5 +26,11 @@ public class ToolRegistry {
 
     public List<String> names() {
         return List.copyOf(toolsByName.keySet());
+    }
+
+    public List<ToolSpecification> specifications() {
+        return toolsByName.values().stream()
+                .map(ToolDefinition::toolSpecification)
+                .toList();
     }
 }

@@ -126,20 +126,77 @@ aggregate: `meanRecallAt5 = 0.833`, `meanNdcgAt5 = 0.871`, `rankingCheckedCases 
 
 ---
 
-### C-3 ⏳ 跑 v1 基线并归档
+### C-3 ⏸ 跑 v1 基线并归档(命令 ready,推迟到 A-5 一起跑)
 
-**目标**: 用真 LLM + 真 embedding 跑一遍 C-2 fixture,把数字归档到本文档,作为后续每个改造的对比基线。
+**为什么推迟**
+- API 成本: 48 LLM calls + 16 embedding + ~30 rerank ≈ $1 量级
+- 数据隔离: 默认 `ZHITU_PGVECTOR_TABLE=zhitu_agent_knowledge` 是 prod 库,eval seed 会污染。需要先准备隔离表 `zhitu_agent_eval`。
+- ROI: A-5 阶段必须跑 v2 baseline,届时一次跑 v1 + v2 节省一半 API 开销。
+
+**运行命令(供未来直接复制)**
+
+```bash
+# 准备隔离表
+psql ... -c "CREATE TABLE zhitu_agent_eval (LIKE zhitu_agent_knowledge INCLUDING ALL);"
+
+# 跑 eval
+ZHITU_PGVECTOR_TABLE=zhitu_agent_eval \
+ZHITU_LLM_MOCK_MODE=false \
+mvn -o spring-boot:run \
+  -Dspring-boot.run.profiles=local \
+  -Dspring-boot.run.arguments="--zhitu.eval.enabled=true --zhitu.eval.exit-after-run=true"
+
+# 报告产物在 target/eval-reports/baseline-comparison-*.json
+```
+
+跑完把数字 paste 进本文档对应表格即可。
 
 ---
 
-## 阶段 A — Function Calling(待开始)
+## 阶段 A — Function Calling
 
 5 个子任务:
-- A-1: `ToolDefinition` 加 `description` + JSON Schema(victools/jsonschema-generator)
-- A-2: `ToolRegistry` 生成 `ToolSpecification` 列表
-- A-3: 接入真 function calling,删除 `looksLikeTimeQuestion` 关键词路由
-- A-4: Tool 调用错误恢复三件套(Retry / schema 校验 / observation 重投)
+- A-1: ✅ `ToolDefinition` 加 `description` + JSON Schema (LangChain4j `ToolSpecification`)
+- A-2: `ChatLanguageModel` 真 function calling 改造,删除 `looksLikeTimeQuestion` 关键词路由
+- A-3: tool_calls 并行执行 + 错误回退到 observation
+- A-4: 错误恢复三件套(Retry / schema 校验 / observation 重投)
 - A-5: 跑 v2 评测对比 v1
+
+---
+
+### A-1 ✅ ToolDefinition 加 description + JSON Schema(2026-04-30 完成)
+
+**做了什么**
+
+- `ToolDefinition` 接口加两个 default 方法 + 一个桥接方法:
+  - `description()` — 给 LLM 看的工具说明,默认 fallback 到 name()
+  - `parameterSchema()` — 返回 LangChain4j `JsonObjectSchema`,默认空对象
+  - `toolSpecification()` — 直接返回可投喂 LangChain4j `OpenAiChatModel.tools(...)` 的 `ToolSpecification`
+- 3 个内置工具填实 schema:
+  - `time` — 无参,description 强调 ISO 8601 + 何时调用
+  - `knowledge-write` — 3 必填 string 参数(question/answer/sourceName),`additionalProperties=false`
+  - `session-inspect` — sessionId 必填,description 提示"this conversation"语义
+- `ToolRegistry.specifications()` 一行返回 `List<ToolSpecification>`,A-2 接入 LLM 即用
+
+**关键设计决策**
+
+1. **default 方法兜底,不破坏外部实现** — 任何已有 `ToolDefinition` 实现仍可编译,仅得到 fallback schema。这是 A-2 真 function calling 的最小侵入前置。
+2. **直接复用 LangChain4j 的 `JsonObjectSchema`** — 不引入第三方 schema 生成器(如 victools/jsonschema-generator),零新依赖。LangChain4j 1.1.0 自带的 schema DSL 已经够用:`addStringProperty(name, description)` + `required(...)` + `additionalProperties(false)`。
+3. **schema description 字段是面试加分点** — 比 OpenAI cookbook 的最佳实践更细:每个 property 都有"什么时候填、用什么形式填"的中文化说明,让 LLM 在边界 case(如 sessionId 含义)上也能正确选择参数。
+4. **`additionalProperties: false`** — 强制 LLM 不发明额外参数,降低幻觉调用失败率。这是 OpenAI structured output / Anthropic tool use 的官方推荐。
+
+**改动文件**
+
+```
+修改   src/main/java/com/zhituagent/tool/ToolDefinition.java          # +description/+parameterSchema/+toolSpecification
+修改   src/main/java/com/zhituagent/tool/ToolRegistry.java            # +specifications()
+修改   src/main/java/com/zhituagent/tool/builtin/TimeTool.java        # +description+schema
+修改   src/main/java/com/zhituagent/tool/builtin/KnowledgeWriteTool.java
+修改   src/main/java/com/zhituagent/tool/builtin/SessionInspectTool.java
+修改   src/test/java/com/zhituagent/tool/ToolRegistryTest.java        # +shouldExposeToolSpecifications
+```
+
+测试:`mvn -o test` 50/50 全绿(+1 新)。
 
 ---
 

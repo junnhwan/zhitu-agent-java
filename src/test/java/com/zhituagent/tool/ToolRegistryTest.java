@@ -8,6 +8,9 @@ import com.zhituagent.session.SessionService;
 import com.zhituagent.tool.builtin.KnowledgeWriteTool;
 import com.zhituagent.tool.builtin.SessionInspectTool;
 import com.zhituagent.tool.builtin.TimeTool;
+import dev.langchain4j.agent.tool.ToolSpecification;
+import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
+import dev.langchain4j.model.chat.request.json.JsonStringSchema;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -47,5 +50,31 @@ class ToolRegistryTest {
         assertThat(result.success()).isTrue();
         assertThat(result.summary()).contains("knowledge stored");
         assertThat(ingestService.search("第一版先做什么？", 3)).isNotEmpty();
+    }
+
+    @Test
+    void shouldExposeToolSpecificationsWithSchemaForLlmFunctionCalling() {
+        ToolRegistry registry = new ToolRegistry(List.of(
+                new TimeTool(Clock.fixed(Instant.parse("2026-04-30T09:00:00Z"), ZoneId.of("Asia/Shanghai"))),
+                new KnowledgeWriteTool(new KnowledgeIngestService(new DocumentSplitter())),
+                new SessionInspectTool(new SessionService(new MemoryService(new MessageSummaryCompressor(4, 6))))
+        ));
+
+        List<ToolSpecification> specs = registry.specifications();
+        assertThat(specs).hasSize(3);
+
+        ToolSpecification timeSpec = specs.stream().filter(s -> s.name().equals("time")).findFirst().orElseThrow();
+        assertThat(timeSpec.description()).contains("ISO 8601");
+        assertThat(timeSpec.parameters().properties()).isEmpty();
+
+        ToolSpecification kwSpec = specs.stream().filter(s -> s.name().equals("knowledge-write")).findFirst().orElseThrow();
+        assertThat(kwSpec.description()).contains("knowledge base");
+        JsonObjectSchema kwParams = kwSpec.parameters();
+        assertThat(kwParams.properties()).containsKeys("question", "answer", "sourceName");
+        assertThat(kwParams.required()).containsExactlyInAnyOrder("question", "answer", "sourceName");
+        assertThat(kwParams.properties().get("question")).isInstanceOf(JsonStringSchema.class);
+
+        ToolSpecification sessSpec = specs.stream().filter(s -> s.name().equals("session-inspect")).findFirst().orElseThrow();
+        assertThat(sessSpec.parameters().required()).containsExactly("sessionId");
     }
 }
