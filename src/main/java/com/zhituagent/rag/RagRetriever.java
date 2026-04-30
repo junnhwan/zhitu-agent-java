@@ -129,6 +129,25 @@ public class RagRetriever {
                 .toList();
 
         RagRetrievalResult result = tryRerank(processedQuery, finalLimit, candidates, hybridEnabled, rerankEnabled);
+        if (shouldRejectLowConfidence(result)) {
+            KnowledgeSnippet rejectedTop = result.snippets().getFirst();
+            log.info(
+                    "RAG 候选已拒绝 rag.search.rejected reason=low_score retrievalMode={} candidateCount={} topSource={} topScore={} minAcceptedScore={} queryPreview={}",
+                    result.retrievalMode(),
+                    result.retrievalCandidateCount(),
+                    rejectedTop.source(),
+                    String.format("%.4f", rejectedTop.score()),
+                    String.format("%.4f", ragProperties.getMinAcceptedScore()),
+                    preview(processedQuery)
+            );
+            result = new RagRetrievalResult(
+                    List.of(),
+                    result.retrievalMode(),
+                    result.retrievalCandidateCount(),
+                    result.rerankModel(),
+                    result.rerankTopScore()
+            );
+        }
         long latencyMs = (System.nanoTime() - startNanos) / 1_000_000;
         if (result.snippets().isEmpty()) {
             ragMetricsRecorder.recordRetrieval(result.retrievalMode(), false, latencyMs, candidates.size(), 0);
@@ -164,6 +183,17 @@ public class RagRetriever {
                 preview(processedQuery)
         );
         return result;
+    }
+
+    private boolean shouldRejectLowConfidence(RagRetrievalResult result) {
+        if (result == null || result.snippets().isEmpty()) {
+            return false;
+        }
+        double minAcceptedScore = ragProperties == null ? 0.0 : ragProperties.getMinAcceptedScore();
+        if (minAcceptedScore <= 0.0) {
+            return false;
+        }
+        return result.snippets().getFirst().score() < minAcceptedScore;
     }
 
     private RagRetrievalResult tryRerank(String processedQuery,

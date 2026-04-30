@@ -33,6 +33,34 @@
 - 给 Prometheus 拉取指标
 - 给 Grafana 面板提供数据源
 
+### 2.3 Trace 文本归档
+
+当前后端还会把关键对话 trace 额外写入本地文本文件。
+
+默认位置：
+
+- `logs/trace/zhitu-agent-trace-YYYY-MM-DD.jsonl`
+
+默认配置：
+
+- `ZHITU_TRACE_ARCHIVE_ENABLED=true`
+- `ZHITU_TRACE_ARCHIVE_DIR=logs/trace`
+- `ZHITU_TRACE_ARCHIVE_FILE_PREFIX=zhitu-agent-trace`
+- `ZHITU_RAG_MIN_ACCEPTED_SCORE=0.15`
+
+当前会归档的事件：
+
+- `chat.completed`
+- `chat.failed`
+- `chat.stream.completed`
+- `chat.stream.failed`
+
+当前每行是一条 JSON，适合：
+
+- 手工排查
+- `rg` / `Select-String` 搜索
+- 后续转成评估样本或异常分析材料
+
 ## 3. 当前指标清单
 
 ### 3.1 会话与接口请求
@@ -149,6 +177,68 @@
 - 按错误类别统计 API 失败
 - 给后续错误面板和问题排查提供聚合入口
 
+### 3.7 Trace 文本归档字段
+
+trace 文本归档当前会保留以下高价值字段：
+
+- `timestamp`
+- `event`
+- `stream`
+- `sessionId`
+- `userId`
+- `requestId`
+- `userMessage`
+- `answerPreview`
+- `errorMessage`
+- `path`
+- `retrievalHit`
+- `toolUsed`
+- `toolName`
+- `retrievalMode`
+- `contextStrategy`
+- `snippetCount`
+- `retrievalCandidateCount`
+- `topSource`
+- `topScore`
+- `rerankModel`
+- `rerankTopScore`
+- `factCount`
+- `inputTokenEstimate`
+- `outputTokenEstimate`
+- `latencyMs`
+- `snippets`
+
+其中 `snippets` 会额外保留：
+
+- `source`
+- `chunkId`
+- `score`
+- `denseScore`
+- `rerankScore`
+- `contentPreview`
+
+## 3.8 路由纠偏日志
+
+当前后端对“弱相关但仍然召回到候选”的场景，已经补了一层低分拒绝。
+
+当 top score 低于 `zhitu.rag.min-accepted-score` 时，日志里会额外打印：
+
+- `rag.search.rejected`
+
+当前日志会带：
+
+- `retrievalMode`
+- `candidateCount`
+- `topSource`
+- `topScore`
+- `minAcceptedScore`
+- `queryPreview`
+
+这类日志特别适合排查：
+
+- 为什么明明召回到了候选，但最终没有走 `retrieve-then-answer`
+- 为什么某些短问题不应该再被判成 RAG 命中
+
 ## 4. 设计边界
 
 当前指标设计明确保持低基数：
@@ -233,6 +323,10 @@ sum(rate(zhitu_api_errors_total[5m])) by (category, code, status)
   - 平均耗时
   - 错误分类
   - 检索命中趋势
+- Trace 文本归档关注：
+  - 单次请求为什么走到某条路径
+  - 低分误召回时命中了哪些 snippet
+  - SSE 失败时当时的 requestId、sessionId、errorMessage 和部分输出
 - Eval Report 关注：
   - dense / dense-rerank / hybrid-rerank 对比
   - topSource 是否符合预期

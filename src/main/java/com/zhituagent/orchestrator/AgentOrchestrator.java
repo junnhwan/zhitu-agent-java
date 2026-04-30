@@ -48,9 +48,21 @@ public class AgentOrchestrator {
     }
 
     private boolean looksLikeTimeQuestion(String userMessage) {
-        return userMessage != null && (
-                userMessage.contains("几点") ||
-                userMessage.toLowerCase().contains("time")
-        );
+        if (userMessage == null || userMessage.isBlank()) {
+            return false;
+        }
+
+        String normalized = userMessage.toLowerCase();
+        return normalized.contains("几点")
+                || normalized.contains("星期几")
+                || normalized.contains("周几")
+                || normalized.contains("几号")
+                || normalized.contains("几月几号")
+                || normalized.contains("几月几日")
+                || normalized.contains("日期")
+                || normalized.contains("day of week")
+                || normalized.contains("what day")
+                || normalized.contains("time")
+                || normalized.contains("date");
     }
 }

@@ -16,6 +16,7 @@ import com.zhituagent.memory.MemoryService;
 import com.zhituagent.orchestrator.AgentOrchestrator;
 import com.zhituagent.orchestrator.RouteDecision;
 import com.zhituagent.session.SessionService;
+import com.zhituagent.trace.TraceArchiveService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -50,6 +51,7 @@ public class ChatController {
     private final ChatTraceFactory chatTraceFactory;
     private final ChatMetricsRecorder chatMetricsRecorder;
     private final ToolMetricsRecorder toolMetricsRecorder;
+    private final TraceArchiveService traceArchiveService;
     private final ObjectMapper objectMapper;
     private final String systemPrompt;
 
@@ -62,6 +64,7 @@ public class ChatController {
                           ChatTraceFactory chatTraceFactory,
                           ChatMetricsRecorder chatMetricsRecorder,
                           ToolMetricsRecorder toolMetricsRecorder,
+                          TraceArchiveService traceArchiveService,
                           ObjectMapper objectMapper,
                           AppProperties appProperties,
                           ResourceLoader resourceLoader) throws IOException {
@@ -74,6 +77,7 @@ public class ChatController {
         this.chatTraceFactory = chatTraceFactory;
         this.chatMetricsRecorder = chatMetricsRecorder;
         this.toolMetricsRecorder = toolMetricsRecorder;
+        this.traceArchiveService = traceArchiveService;
         this.objectMapper = objectMapper;
         Resource resource = resourceLoader.getResource(appProperties.getSystemPromptLocation());
         this.systemPrompt = resource.getContentAsString(StandardCharsets.UTF_8);
@@ -140,6 +144,17 @@ public class ChatController {
                                         contextBundle,
                                         answerBuilder.toString()
                                 );
+                                traceArchiveService.archiveSuccess(
+                                        "chat.stream.completed",
+                                        true,
+                                        request.sessionId(),
+                                        request.userId(),
+                                        requestId,
+                                        request.message(),
+                                        answerBuilder.toString(),
+                                        traceInfo,
+                                        routeDecision
+                                );
                                 log.info(
                                         "流式对话完成 chat.stream.completed sessionId={} path={} retrievalHit={} toolUsed={} requestId={} answerLength={} latencyMs={}",
                                         request.sessionId(),
@@ -161,6 +176,7 @@ public class ChatController {
                         }
                 );
             } catch (Exception exception) {
+                long latencyMs = elapsedMillis(startNanos);
                 log.error(
                         "流式对话失败 chat.stream.failed sessionId={} requestId={} path={} message={}",
                         request.sessionId(),
@@ -169,7 +185,20 @@ public class ChatController {
                         exception.getMessage(),
                         exception
                 );
-                chatMetricsRecorder.recordRequest(routeDecision.path(), true, false, elapsedMillis(startNanos));
+                chatMetricsRecorder.recordRequest(routeDecision.path(), true, false, latencyMs);
+                traceArchiveService.archiveFailure(
+                        "chat.stream.failed",
+                        true,
+                        request.sessionId(),
+                        request.userId(),
+                        requestId,
+                        request.message(),
+                        answerBuilder.toString(),
+                        exception.getMessage(),
+                        latencyMs,
+                        routeDecision,
+                        contextBundle
+                );
                 try {
                     emitter.send(SseEmitter.event()
                             .name("error")

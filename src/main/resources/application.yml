@@ -36,6 +36,7 @@ zhitu:
   rag:
     hybrid-enabled: ${ZHITU_RAG_HYBRID_ENABLED:true}
     lexical-top-k: ${ZHITU_RAG_LEXICAL_TOP_K:10}
+    min-accepted-score: ${ZHITU_RAG_MIN_ACCEPTED_SCORE:0.15}
   pgvector:
     host: ${ZHITU_PGVECTOR_HOST:localhost}
     port: ${ZHITU_PGVECTOR_PORT:5432}
@@ -48,6 +49,10 @@ zhitu:
   infrastructure:
     redis-enabled: ${ZHITU_REDIS_ENABLED:false}
     pgvector-enabled: ${ZHITU_PGVECTOR_ENABLED:false}
+  trace-archive:
+    enabled: ${ZHITU_TRACE_ARCHIVE_ENABLED:true}
+    dir: ${ZHITU_TRACE_ARCHIVE_DIR:logs/trace}
+    file-prefix: ${ZHITU_TRACE_ARCHIVE_FILE_PREFIX:zhitu-agent-trace}
 
 management:
   defaults:

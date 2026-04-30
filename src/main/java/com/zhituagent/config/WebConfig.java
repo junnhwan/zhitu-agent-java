@@ -14,7 +14,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
         RerankProperties.class,
         PgVectorProperties.class,
         InfrastructureProperties.class,
-        EvalProperties.class
+        EvalProperties.class,
+        TraceArchiveProperties.class
 })
 public class WebConfig implements WebMvcConfigurer {
 

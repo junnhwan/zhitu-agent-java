@@ -1,6 +1,6 @@
 # 开发进度
 
-最后更新时间：2026-04-28
+最后更新时间：2026-04-29
 当前分支：`main`
 
 ## 总体状态
@@ -27,13 +27,15 @@
 - 已完成：Redis 会话与记忆真实链路首轮联调已打通
 - 已完成：dense / dense-rerank / hybrid-rerank 已具备可运行和可评估能力
 - 已完成：Prometheus 指标、错误分类、评估报告资产已补齐第一版
+- 已完成：`chat` / `streamChat` trace 文本归档已补齐，可直接落盘排查
+- 已完成：路由修复第一轮已落地，时间类问题优先走 tool，低分 RAG 会被拒绝
 - 已完成：当前仓库以后端接口链路为主，不再由本 agent 维护前端
 
 最新全量验证结果：
 
 - `.\mvnw.cmd test`
   - 结果：通过
-  - 统计：`45` 个测试全部通过
+  - 统计：`49` 个测试全部通过
 
 ## 当前已具备能力
 
@@ -89,6 +91,12 @@
 - `dense-rerank`
 - `hybrid-rerank`
 
+当前路由口径补充：
+
+- 时间/日期/星期类问题优先走 `time` 工具
+- RAG 不再是“只要有 snippet 就算命中”
+- 当 top score 低于 `zhitu.rag.min-accepted-score` 时，会直接拒绝 RAG 候选并回退 `direct-answer`
+
 ### ToolUse
 
 当前内置工具：
@@ -124,12 +132,24 @@
 
 - `GET /actuator/health`
 - `GET /actuator/prometheus`
+- 本地 trace 文本归档
 - 聊天请求指标
 - LLM 请求指标
 - RAG / rerank 指标
 - ToolUse 指标
 - 记忆压缩指标
 - API 错误分类指标
+
+当前 trace 归档默认位置：
+
+- `logs/trace/zhitu-agent-trace-YYYY-MM-DD.jsonl`
+
+当前会归档的关键事件：
+
+- `chat.completed`
+- `chat.failed`
+- `chat.stream.completed`
+- `chat.stream.failed`
 
 错误分类当前取值：
 
@@ -285,6 +305,7 @@
 - 可观测性说明文档
 - Grafana 导入模板
 - 优化报告模板
+- 独立 trace 文本归档能力
 
 ## 文档与资产
 
@@ -308,6 +329,18 @@
   - 统计：`45` 个测试全部通过
 - `docs/grafana/zhitu-agent-dashboard.json`
   - 已用 PowerShell `ConvertFrom-Json` 校验 JSON 格式有效
+
+### 2026-04-29
+
+- `.\mvnw.cmd -Dtest=ChatControllerTest test`
+  - 结果：通过
+  - 说明：已验证 `chat.completed`、`chat.failed`、`chat.stream.completed` 三类 trace 会写入文本文件
+- `.\mvnw.cmd -Dtest=AgentOrchestratorTest,RagRetrieverTest test`
+  - 结果：通过
+  - 说明：已验证“今天星期几”会优先走 `time`，低分 rerank 结果会被拒绝
+- `.\mvnw.cmd test`
+  - 结果：通过
+  - 统计：`49` 个测试全部通过
 
 ## 当前已知边界
 

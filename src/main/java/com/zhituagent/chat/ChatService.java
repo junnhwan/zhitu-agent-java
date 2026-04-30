@@ -15,6 +15,7 @@ import com.zhituagent.orchestrator.RouteDecision;
 import com.zhituagent.rag.RetrievalMode;
 import com.zhituagent.rag.RetrievalRequestOptions;
 import com.zhituagent.session.SessionService;
+import com.zhituagent.trace.TraceArchiveService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.Resource;
@@ -39,6 +40,7 @@ public class ChatService {
     private final ChatTraceFactory chatTraceFactory;
     private final ChatMetricsRecorder chatMetricsRecorder;
     private final ToolMetricsRecorder toolMetricsRecorder;
+    private final TraceArchiveService traceArchiveService;
     private final String systemPrompt;
 
     public ChatService(LlmRuntime llmRuntime,
@@ -49,6 +51,7 @@ public class ChatService {
                        ChatTraceFactory chatTraceFactory,
                        ChatMetricsRecorder chatMetricsRecorder,
                        ToolMetricsRecorder toolMetricsRecorder,
+                       TraceArchiveService traceArchiveService,
                        AppProperties appProperties,
                        ResourceLoader resourceLoader) throws IOException {
         this.llmRuntime = llmRuntime;
@@ -59,6 +62,7 @@ public class ChatService {
         this.chatTraceFactory = chatTraceFactory;
         this.chatMetricsRecorder = chatMetricsRecorder;
         this.toolMetricsRecorder = toolMetricsRecorder;
+        this.traceArchiveService = traceArchiveService;
         Resource resource = resourceLoader.getResource(appProperties.getSystemPromptLocation());
         this.systemPrompt = resource.getContentAsString(StandardCharsets.UTF_8);
     }
@@ -89,48 +93,87 @@ public class ChatService {
         long startNanos = System.nanoTime();
         Map<String, Object> safeMetadata = metadata == null ? Map.of() : Map.copyOf(metadata);
         RetrievalRequestOptions safeOptions = retrievalOptions == null ? RetrievalRequestOptions.defaults() : retrievalOptions;
+        RouteDecision routeDecision = null;
+        ContextBundle contextBundle = null;
+        try {
+            sessionService.ensureSession(sessionId, userId);
+            sessionService.appendMessage(sessionId, userId, "user", message);
 
-        sessionService.ensureSession(sessionId, userId);
-        sessionService.appendMessage(sessionId, userId, "user", message);
+            routeDecision = agentOrchestrator.decide(message, safeOptions);
+            recordToolMetric(routeDecision);
+            logRouteDecision(requestId, sessionId, routeDecision);
 
-        RouteDecision routeDecision = agentOrchestrator.decide(message, safeOptions);
-        recordToolMetric(routeDecision);
-        logRouteDecision(requestId, sessionId, routeDecision);
+            contextBundle = contextManager.build(
+                    systemPrompt,
+                    memoryService.snapshot(sessionId),
+                    message,
+                    buildEvidenceBlock(routeDecision)
+            );
 
-        ContextBundle contextBundle = contextManager.build(
-                systemPrompt,
-                memoryService.snapshot(sessionId),
-                message,
-                buildEvidenceBlock(routeDecision)
-        );
+            String answer = llmRuntime.generate(
+                    systemPrompt,
+                    contextBundle.modelMessages(),
+                    safeMetadata
+            );
 
-        String answer = llmRuntime.generate(
-                systemPrompt,
-                contextBundle.modelMessages(),
-                safeMetadata
-        );
-
-        sessionService.appendMessage(sessionId, userId, "assistant", answer);
-        long latencyMs = elapsedMillis(startNanos);
-        TraceInfo traceInfo = chatTraceFactory.create(
-                routeDecision,
-                requestId,
-                latencyMs,
-                contextBundle,
-                answer
-        );
-        log.info(
-                "对话完成 chat.completed sessionId={} path={} retrievalHit={} toolUsed={} requestId={} answerLength={} latencyMs={}",
-                sessionId,
-                routeDecision.path(),
-                routeDecision.retrievalHit(),
-                routeDecision.toolUsed(),
-                requestId,
-                answer.length(),
-                latencyMs
-        );
-        chatMetricsRecorder.recordRequest(routeDecision.path(), false, true, latencyMs);
-        return new ChatResponse(sessionId, answer, traceInfo);
+            sessionService.appendMessage(sessionId, userId, "assistant", answer);
+            long latencyMs = elapsedMillis(startNanos);
+            TraceInfo traceInfo = chatTraceFactory.create(
+                    routeDecision,
+                    requestId,
+                    latencyMs,
+                    contextBundle,
+                    answer
+            );
+            log.info(
+                    "对话完成 chat.completed sessionId={} path={} retrievalHit={} toolUsed={} requestId={} answerLength={} latencyMs={}",
+                    sessionId,
+                    routeDecision.path(),
+                    routeDecision.retrievalHit(),
+                    routeDecision.toolUsed(),
+                    requestId,
+                    answer.length(),
+                    latencyMs
+            );
+            chatMetricsRecorder.recordRequest(routeDecision.path(), false, true, latencyMs);
+            traceArchiveService.archiveSuccess(
+                    "chat.completed",
+                    false,
+                    sessionId,
+                    userId,
+                    requestId,
+                    message,
+                    answer,
+                    traceInfo,
+                    routeDecision
+            );
+            return new ChatResponse(sessionId, answer, traceInfo);
+        } catch (Exception exception) {
+            long latencyMs = elapsedMillis(startNanos);
+            String path = routeDecision == null ? "direct-answer" : routeDecision.path();
+            log.error(
+                    "对话失败 chat.failed sessionId={} path={} requestId={} message={}",
+                    sessionId,
+                    path,
+                    requestId,
+                    exception.getMessage()
+            );
+            chatMetricsRecorder.recordRequest(path, false, false, latencyMs);
+            traceArchiveService.archiveFailure(
+                    "chat.failed",
+                    false,
+                    sessionId,
+                    userId,
+                    requestId,
+                    message,
+                    "",
+                    exception.getMessage(),
+                    latencyMs,
+                    routeDecision,
+                    contextBundle
+            );
+            throw exception;
+        }
     }
 
     private String buildEvidenceBlock(RouteDecision routeDecision) {

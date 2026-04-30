@@ -31,6 +31,7 @@ class AgentOrchestratorTest {
         RouteDecision directDecision = orchestrator.decide("你好");
         RouteDecision retrieveDecision = orchestrator.decide("第一版先做什么？");
         RouteDecision toolDecision = orchestrator.decide("现在几点了？");
+        RouteDecision weekdayDecision = orchestrator.decide("今天星期几？");
 
         assertThat(directDecision.path()).isEqualTo("direct-answer");
         assertThat(directDecision.toolUsed()).isFalse();
@@ -46,5 +47,10 @@ class AgentOrchestratorTest {
         assertThat(toolDecision.toolUsed()).isTrue();
         assertThat(toolDecision.toolName()).isEqualTo("time");
         assertThat(toolDecision.retrievalMode()).isEqualTo("none");
+
+        assertThat(weekdayDecision.path()).isEqualTo("tool-then-answer");
+        assertThat(weekdayDecision.toolUsed()).isTrue();
+        assertThat(weekdayDecision.toolName()).isEqualTo("time");
+        assertThat(weekdayDecision.retrievalMode()).isEqualTo("none");
     }
 }
