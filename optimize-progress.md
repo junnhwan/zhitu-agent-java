@@ -524,12 +524,54 @@ A-5 baseline 比对时打开此 flag,看那些 v1 检索 miss 的 case 是否被
 
 ---
 
+### T2 ✅ 前端 SpanTree(2026-04-30 完成)
+
+**做了什么**
+
+把扁平 `TracePanel` 的 KV 升级到嵌套时间轴树。后端 T1/SG/SR 已经在 chat.turn / agent.iter / agent.llm_call / agent.tool_calls / rag.self_rag.iter 等关键节点起好了 span,前端直接消费 `complete` 事件携带的 spans 数组重建树,按起始时间排序。
+
+- `frontend/src/types/api.ts`:新增 `Span` 接口(对齐后端 `com.zhituagent.trace.Span` record:`spanId/parentSpanId/traceId/name/kind/start/end/status/attributes`)。`TraceInfo` 加 `traceId`、`spans`、`retrievedSources` 三个字段(原 wire format 已经在送,前端 TS 类型补齐)。
+- `frontend/src/hooks/useStreamingChat.ts`:`emptyTrace` 加默认空 `traceId/spans/retrievedSources`,onComplete 不需要改 — 整个 TraceInfo 整体传递。
+- 新增 `frontend/src/components/layout/SpanTree.tsx`(单文件 ~190 行):
+  - `buildTree(spans)`:扫一遍建 `Map<spanId, node>`,二次扫挂 `parentSpanId` 为 children;DFS stamp depth + 按 startEpochMillis 排序 → roots 列表
+  - `SpanNode` 递归渲染,缩进 `depth * 14px`,显示 name | kind chip | duration ms | status badge | timeline bar(以 `(start - minStart)/totalDuration` 为 offset,以 `duration/totalDuration` 为 width)
+  - 子节点折叠/展开 (`<ChevronRight/Down>`),attributes 折叠为 "查看 N 项属性" 按钮 → 展开 key/value 表格
+  - status 颜色:`ok`(绿)/`error`(红)/`incomplete`/`continue`(黄)
+- 新增 `frontend/src/components/layout/SpanTree.css`(~190 行):glassmorphism + `tabular-nums` + status 颜色 ramp,与现有 TracePanel 视觉一致
+- `TracePanel.tsx`:在 `aside-extended` 内嵌 `<SpanTree spans={trace.spans} />`,只在有 span 时渲染
+
+**关键设计决策**
+
+1. **客户端建树而非后端送好** — 后端 spans 是平铺数组(简化序列化),前端拿到自己组树。优点:后端不需要维护 nested 结构序列化,SSE wire format 始终是 flat list 的 JSON 数组,易于 archive/replay/diff。简历卖点:"flat-on-wire, tree-in-view 是 OpenTelemetry/LangSmith trace UI 的标准做法"。
+2. **timeline bar offset+width 用百分比** — 任何 chat.turn 的总时长不一样,bar 用相对百分比自动适应;同一深度的兄弟 span 起止位置反映真实时序(不是均匀分布)。简历可挂"用 timeline bar 让时间轴 + 嵌套树同框,LangSmith 同款"。
+3. **attributes lazy 展开** — 默认折成一个按钮,点击才显示表格。span 数量多时(ReAct 4 轮 + 每轮 3 个 sub-span ≈ 12 span)默认全展开会让 panel 很拥挤;按需展开是体验加分。
+4. **`SpanNode` 递归而非扁平 + flex indent** — 递归更直观,depth 缩进 = `depth * 14px`,层级关系一目了然。代价:深度过深时 css padding 累加,但 chat.turn 一般不超过 4 层,可控。
+5. **客户端类型与后端 Java record 1:1** — `Span` interface 字段名/类型与 `com.zhituagent.trace.Span` record 完全对齐,改任一边都要同步另一边。简历可挂"前后端 trace 协议契约由 SseEventType enum + Span record 双向锁死"。
+6. **不引第三方 D3/Vis lib** — 全靠 React + framer-motion + 几条 CSS gradient bar 搞定可视化,bundle size 不变。如果未来要 zoomable timeline 再换 visx/d3。
+
+**改动文件**
+
+```
+修改   frontend/src/types/api.ts                                # +Span +traceId +spans +retrievedSources
+修改   frontend/src/hooks/useStreamingChat.ts                   # emptyTrace 补默认
+新增   frontend/src/components/layout/SpanTree.tsx              # 递归节点 + buildTree
+新增   frontend/src/components/layout/SpanTree.css              # glassmorphism + status 颜色
+修改   frontend/src/components/layout/TracePanel.tsx            # 嵌入 SpanTree
+```
+
+测试:`npx tsc --noEmit` clean(无 TS 错误);后端 mvn 89/89 仍绿(后端没碰)。
+
+**怎么看效果**: 在 `application-local.yml` 打开 `react-enabled: true` + `self-rag-enabled: true`,问一个会触发工具/RAG/Self-RAG 的复合问题,前端 Run Trace 面板下方就会出现 SpanTree:`chat.turn` 根 → `orchestrator.decide` / `context.build` / `llm.generate` 子 → `agent.iter`(每轮)/`rag.self_rag.iter`(每次重检索)。
+
+---
+
 ## 阶段 2 — 差异化亮点(待开始)
 
 7 个子任务,任挑两三个写进简历即可:
 - ✅ ReAct/StateGraph 循环(LangGraph 对标)— 见 SG 段落
 - ✅ Anthropic Contextual Retrieval + 真 BM25 + RRF — 见 CR-1 段落(CR-2 真 BM25 推迟)
 - ✅ Self-RAG / CRAG 检索充分性评估 — 见 SR 段落
+- ✅ Trace 升 span 树 + 前端 TraceTree(LangSmith 对标)— 见 T2 段落
 - MemGPT / Mem0 风格 memory(LLM 抽取 + add/update/merge + reflection)
 - MCP 客户端
 - HITL(@RequireApproval + SSE tool_call_pending)

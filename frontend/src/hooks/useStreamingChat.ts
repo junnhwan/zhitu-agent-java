@@ -24,6 +24,9 @@ const emptyTrace: Omit<TraceDisplay, "status"> = {
   factCount: 0,
   inputTokenEstimate: 0,
   outputTokenEstimate: 0,
+  retrievedSources: [],
+  traceId: "",
+  spans: [],
 };
 
 export function emptyTraceDisplay(): TraceDisplay {

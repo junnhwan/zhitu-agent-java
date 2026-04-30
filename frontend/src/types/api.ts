@@ -32,6 +32,18 @@ export interface ChatResponse {
   trace: TraceInfo;
 }
 
+export interface Span {
+  spanId: string;
+  parentSpanId: string | null;
+  traceId: string;
+  name: string;
+  kind: string;
+  startEpochMillis: number;
+  endEpochMillis: number;
+  status: string;
+  attributes: Record<string, unknown>;
+}
+
 export interface TraceInfo {
   path: string;
   retrievalHit: boolean;
@@ -49,6 +61,9 @@ export interface TraceInfo {
   factCount: number;
   inputTokenEstimate: number;
   outputTokenEstimate: number;
+  retrievedSources: string[];
+  traceId: string;
+  spans: Span[];
 }
 
 export interface SessionCreateRequest {

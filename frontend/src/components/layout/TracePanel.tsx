@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import type { TraceDisplay } from "../../hooks/useStreamingChat";
+import SpanTree from "./SpanTree";
 import "./TracePanel.css";
 
 export default function TracePanel({ trace }: { trace: TraceDisplay }) {
@@ -62,6 +63,10 @@ export default function TracePanel({ trace }: { trace: TraceDisplay }) {
               <span className="aside-request-label">Request</span>
               <span className="aside-request-val">{trace.requestId}</span>
             </div>
+          )}
+
+          {trace.spans && trace.spans.length > 0 && (
+            <SpanTree spans={trace.spans} />
           )}
 
           <CopyTraceButton trace={trace} />
