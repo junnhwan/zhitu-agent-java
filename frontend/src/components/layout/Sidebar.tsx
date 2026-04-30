@@ -1,6 +1,24 @@
 import { motion } from "framer-motion";
 import { MessageSquarePlus, Settings, Layers } from "lucide-react";
+import type { SessionState } from "../../hooks/types";
 import "./Sidebar.css";
+
+function hashHue(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) {
+    h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  }
+  return h % 360;
+}
+
+function sessionToken(s: SessionState, idx: number): string {
+  const firstUser = s.messages?.find((m) => m.role === "user")?.content;
+  if (firstUser) {
+    const first = firstUser.trim().slice(0, 1);
+    if (first) return first;
+  }
+  return String(idx + 1);
+}
 
 export default function Sidebar({
   sessions,
@@ -10,7 +28,7 @@ export default function Sidebar({
   onOpenKnowledge,
   onOpenSettings,
 }: {
-  sessions: { sessionId: string; title: string }[];
+  sessions: SessionState[];
   activeIdx: number;
   onNew: () => void;
   onSelect: (i: number) => void;
@@ -26,19 +44,30 @@ export default function Sidebar({
       <div className="nav-divider" />
 
       <div className="nav-sessions">
-        {sessions.slice(0, 5).map((s, i) => (
-          <motion.button
-            key={s.sessionId}
-            type="button"
-            className={`nav-session-btn ${i === activeIdx ? "active" : ""}`}
-            onClick={() => onSelect(i)}
-            title={s.title}
-            whileHover={{ scale: 1.08 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <span className="nav-session-num">{i + 1}</span>
-          </motion.button>
-        ))}
+        {sessions.slice(0, 5).map((s, i) => {
+          const hue = hashHue(s.sessionId);
+          const token = sessionToken(s, i);
+          const isActive = i === activeIdx;
+          const style = isActive
+            ? undefined
+            : ({
+                "--hue": String(hue),
+              } as React.CSSProperties);
+          return (
+            <motion.button
+              key={s.sessionId}
+              type="button"
+              className={`nav-session-btn ${isActive ? "active" : ""}`}
+              style={style}
+              onClick={() => onSelect(i)}
+              title={s.title}
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <span className="nav-session-token">{token}</span>
+            </motion.button>
+          );
+        })}
       </div>
 
       <div className="nav-spacer" />
@@ -86,15 +115,15 @@ function SidebarStyles() {
   return (
     <style>{`
       .nav-logo {
-        width: 40px; height: 40px; border-radius: 14px;
+        width: 40px; height: 40px; border-radius: var(--r-sm);
         background: var(--g-azure);
         display: flex; align-items: center; justify-content: center;
-        box-shadow: 0 4px 16px rgba(56,189,248,0.25);
+        box-shadow: 0 4px 16px rgba(14,165,233,0.28);
         position: relative;
         margin-bottom: 4px;
       }
       .nav-logo::before {
-        content: ''; position: absolute; inset: 0; border-radius: 14px;
+        content: ''; position: absolute; inset: 0; border-radius: inherit;
         background: linear-gradient(135deg, rgba(255,255,255,0.35) 0%, transparent 50%);
       }
       .nav-logo-dot {
@@ -114,43 +143,52 @@ function SidebarStyles() {
 
       .nav-session-btn {
         appearance: none; border: none; cursor: pointer;
-        width: 38px; height: 38px; border-radius: 12px;
-        background: rgba(255,255,255,0.35);
+        width: 38px; height: 38px; border-radius: var(--r-sm);
+        background: hsl(var(--hue, 200), 38%, 92%);
         backdrop-filter: blur(8px);
         display: flex; align-items: center; justify-content: center;
-        transition: all 0.25s ease;
+        transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
         position: relative;
-        font-family: var(--sans); color: var(--t3); font-weight: 700; font-size: 0.85rem;
+        font-family: var(--sans);
+        color: hsl(var(--hue, 200), 30%, 35%);
+        font-weight: 700; font-size: var(--fs-sm);
+        overflow: hidden;
       }
       .nav-session-btn:hover {
-        background: rgba(255,255,255,0.55);
-        color: var(--t2);
+        background: hsl(var(--hue, 200), 50%, 85%);
+        color: hsl(var(--hue, 200), 40%, 25%);
       }
       .nav-session-btn.active {
-        background: var(--azure-glow);
-        color: var(--azure-deep);
-        box-shadow: 0 2px 8px rgba(56,189,248,0.15);
+        background: var(--g-azure-solid);
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(14,165,233,0.32);
       }
       .nav-session-btn.active::after {
         content: ''; position: absolute; left: -16px; top: 50%; transform: translateY(-50%);
-        width: 3px; height: 16px; border-radius: 0 3px 3px 0;
+        width: 3px; height: 18px; border-radius: 0 3px 3px 0;
         background: var(--g-azure);
+      }
+      .nav-session-token {
+        line-height: 1;
+        max-width: 100%;
+        overflow: hidden;
+        white-space: nowrap;
       }
 
       .nav-spacer { flex: 1; }
 
       .nav-icon-btn {
         appearance: none; border: none; cursor: pointer;
-        width: 42px; height: 42px; border-radius: 14px;
+        width: 42px; height: 42px; border-radius: var(--r-sm);
         background: rgba(255,255,255,0.3);
         backdrop-filter: blur(8px);
         display: flex; align-items: center; justify-content: center;
         color: var(--t3);
         transition: all 0.25s ease;
       }
-      .nav-icon-btn:hover { background: rgba(255,255,255,0.5); color: var(--t2); }
+      .nav-icon-btn:hover { background: rgba(255,255,255,0.55); color: var(--t2); }
       .nav-icon-btn.ghost { background: transparent; }
-      .nav-icon-btn.ghost:hover { background: rgba(255,255,255,0.25); }
+      .nav-icon-btn.ghost:hover { background: rgba(255,255,255,0.3); }
       .nav-icon-btn.disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
     `}</style>
   );

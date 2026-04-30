@@ -2,20 +2,21 @@
   display: flex;
   gap: 12px;
   margin-bottom: 24px;
-  max-width: 88%;
+  max-width: 80%;
 }
 .cm.user { margin-left: auto; flex-direction: row-reverse; }
 
 /* Avatar */
 .cm-avatar {
-  width: 32px; height: 32px; border-radius: 10px;
+  width: 32px; height: 32px; border-radius: var(--r-sm);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
   margin-top: 2px;
 }
 .cm-avatar.user {
-  background: var(--azure-glow);
-  color: var(--azure-deep);
+  background: var(--g-azure-solid);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(14,165,233,0.28);
 }
 .cm-avatar.assistant {
   background: rgba(0,0,0,0.04);
@@ -23,32 +24,40 @@
 }
 
 /* Bubble */
-.cm-bubble-wrap { display: flex; flex-direction: column; gap: 4px; }
+.cm-bubble-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cm.user .cm-bubble-wrap { align-items: flex-end; }
 
 .cm-bubble {
   padding: 12px 18px;
-  border-radius: 18px;
-  font-size: 0.94rem;
-  line-height: 1.7;
+  border-radius: var(--r-md);
+  font-size: var(--fs-md);
+  line-height: 1.65;
   position: relative;
   overflow: hidden;
   word-break: break-word;
 }
 .cm.user .cm-bubble {
-  background: rgba(56,189,248,0.1);
-  border: 1px solid rgba(56,189,248,0.18);
+  background: var(--g-azure-solid);
+  border: 1px solid rgba(14,165,233,0.5);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(14,165,233,0.22);
   white-space: pre-wrap;
 }
+.cm.user .cm-bubble::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 55%);
+  pointer-events: none;
+}
 .cm.assistant .cm-bubble {
-  background: rgba(255,255,255,0.55);
+  background: rgba(255,255,255,0.6);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,0.4);
+  border: 1px solid rgba(255,255,255,0.5);
   box-shadow: var(--s2);
 }
 .cm.assistant .cm-bubble::before {
   content: ''; position: absolute; inset: 0; border-radius: inherit;
-  background: linear-gradient(135deg, rgba(255,255,255,0.35) 0%, transparent 50%);
+  background: linear-gradient(135deg, rgba(255,255,255,0.32) 0%, transparent 55%);
   pointer-events: none;
 }
 
@@ -61,10 +70,10 @@
 .cm-md h1, .cm-md h2, .cm-md h3, .cm-md h4 {
   font-weight: 800; letter-spacing: -0.02em; margin: 18px 0 8px;
 }
-.cm-md h1 { font-size: 1.3rem; }
-.cm-md h2 { font-size: 1.15rem; }
-.cm-md h3 { font-size: 1.05rem; }
-.cm-md h4 { font-size: 0.98rem; }
+.cm-md h1 { font-size: var(--fs-lg); }
+.cm-md h2 { font-size: 1.1rem; }
+.cm-md h3 { font-size: var(--fs-md); }
+.cm-md h4 { font-size: var(--fs-base); }
 .cm-md h1:first-child, .cm-md h2:first-child, .cm-md h3:first-child { margin-top: 0; }
 
 .cm-md strong { font-weight: 700; }
@@ -85,7 +94,7 @@
 
 .cm-md pre {
   background: rgba(15,23,42,0.06);
-  border-radius: var(--r-md);
+  border-radius: var(--r-sm);
   padding: 14px 18px;
   overflow-x: auto;
   margin: 10px 0;
@@ -113,7 +122,7 @@
 .cm-md table {
   border-collapse: collapse;
   margin: 10px 0;
-  font-size: 0.88rem;
+  font-size: var(--fs-base);
   width: 100%;
 }
 .cm-md th, .cm-md td {
@@ -127,6 +136,8 @@
 }
 
 .cm-role {
-  font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
-  letter-spacing: 0.08em; color: var(--t4); padding-left: 4px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--t3);
+  padding: 0 4px;
 }

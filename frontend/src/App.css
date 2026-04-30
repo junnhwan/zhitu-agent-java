@@ -7,10 +7,11 @@
   --glass: rgba(255, 255, 255, 0.4);
   --glass-strong: rgba(255, 255, 255, 0.6);
   --glass-border: rgba(255, 255, 255, 0.35);
-  --glass-glow: rgba(56, 189, 248, 0.35);
-  --azure: #38bdf8;
+  --glass-glow: rgba(14, 165, 233, 0.35);
+  --azure: #0ea5e9;
+  --azure-bright: #38bdf8;
   --azure-deep: #0369a1;
-  --azure-glow: rgba(56, 189, 248, 0.15);
+  --azure-glow: rgba(14, 165, 233, 0.14);
   --warm: #f59e0b;
   --warm-glow: rgba(245, 158, 11, 0.1);
   --purple: #a855f7;
@@ -25,11 +26,22 @@
   --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  /* Radii */
-  --r-xl: 28px;
+  /* Font sizes — 6 step scale */
+  --fs-xs: 0.6875rem;   /* 11px — labels, ids, micro */
+  --fs-sm: 0.75rem;     /* 12px — secondary text */
+  --fs-base: 0.875rem;  /* 14px — body */
+  --fs-md: 1rem;        /* 16px — chat message */
+  --fs-lg: 1.25rem;     /* 20px — section title */
+  --fs-xl: 1.5rem;      /* 24px — workspace title */
+
+  /* Radii — 3 step scale (xl kept for special cases) */
+  --r-sm: 12px;
+  --r-md: 16px;
   --r-lg: 20px;
-  --r-md: 14px;
-  --r-sm: 10px;
+  --r-xl: 28px;
+
+  /* Layout */
+  --content-max: 760px;
 
   /* Shadows */
   --s1: 0 2px 4px rgba(0,0,0,0.02);
@@ -39,7 +51,8 @@
   --si: inset 0 1px 0 rgba(255,255,255,0.5);
 
   /* Gradients */
-  --g-azure: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 50%, #0369a1 100%);
+  --g-azure: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 55%, #0369a1 100%);
+  --g-azure-solid: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
   --g-text: linear-gradient(135deg, #0f172a 0%, #334155 100%);
 }
 

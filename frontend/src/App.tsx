@@ -98,7 +98,10 @@ export default function App() {
             sessionId={state.activeSessionId}
             facts={activeSession?.facts ?? []}
           >
-            <ChatPanel messages={activeSession?.messages ?? []} />
+            <ChatPanel
+              messages={activeSession?.messages ?? []}
+              onSuggestionClick={handleSend}
+            />
           </Workspace>
         }
         aside={<TracePanel trace={trace} />}

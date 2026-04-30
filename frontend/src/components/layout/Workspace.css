@@ -2,7 +2,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 32px;
+  padding: 22px 36px;
   background: rgba(255,255,255,0.35);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -13,44 +13,59 @@
 .wk-header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
+  min-width: 0;
 }
 
-.wk-header-icon {
-  color: var(--azure);
+.wk-header-bar {
+  width: 3px;
+  height: 22px;
+  border-radius: 2px;
+  background: var(--g-azure);
+  flex-shrink: 0;
 }
 
 .wk-header-title {
-  font-size: 1.1rem;
+  font-size: var(--fs-xl);
   font-weight: 800;
   letter-spacing: -0.02em;
+  line-height: 1.2;
   background: var(--g-text);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .wk-header-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .wk-header-facts {
   display: flex; align-items: center; gap: 4px;
-  font-family: var(--mono); font-size: 0.72rem; color: var(--azure-deep);
+  font-family: var(--mono); font-size: var(--fs-sm); color: var(--azure-deep);
   background: var(--azure-glow);
-  padding: 4px 10px; border-radius: 6px;
+  padding: 4px 10px; border-radius: 8px;
   cursor: default;
 }
 
 .wk-header-id {
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--fs-sm);
   color: var(--t3);
   background: rgba(0,0,0,0.03);
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.wk-header:hover .wk-header-id {
+  opacity: 1;
 }
 
 .wk-body {

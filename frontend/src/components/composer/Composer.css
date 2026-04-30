@@ -1,18 +1,19 @@
 .composer {
-  max-width: 720px;
+  max-width: var(--content-max);
   margin: 0 auto;
   width: 100%;
+  padding: 0 24px 20px;
 }
 
 .composer-inner {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  background: rgba(255,255,255,0.55);
+  background: rgba(255,255,255,0.6);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255,255,255,0.4);
-  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.5);
+  border-radius: var(--r-md);
   padding: 10px 10px 10px 20px;
   box-shadow: var(--s3), var(--si);
   transition: all 0.3s ease;
@@ -21,41 +22,45 @@
 }
 .composer-inner::before {
   content: ''; position: absolute; inset: 0; border-radius: inherit;
-  background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, transparent 40%);
+  background: linear-gradient(135deg, rgba(255,255,255,0.28) 0%, transparent 45%);
   pointer-events: none;
 }
 
 .composer-inner:focus-within {
   border-color: var(--glass-glow);
-  box-shadow: var(--s3), 0 0 0 4px rgba(56,189,248,0.06);
+  box-shadow: var(--s3), 0 0 0 4px rgba(14,165,233,0.08);
 }
 
 .composer-input {
   flex: 1;
   border: none; outline: none;
   background: transparent;
-  font: 500 0.95rem/1.5 var(--sans);
+  font: 500 var(--fs-base)/1.55 var(--sans);
   color: var(--t1);
   resize: none;
   min-height: 28px;
   max-height: 120px;
+  position: relative;
+  z-index: 1;
 }
 .composer-input::placeholder { color: var(--t4); }
 .composer-input:disabled { opacity: 0.4; }
 
 .composer-send {
   appearance: none; border: none; cursor: pointer;
-  width: 38px; height: 38px; border-radius: 12px;
+  width: 38px; height: 38px; border-radius: var(--r-sm);
   background: rgba(0,0,0,0.04);
   display: flex; align-items: center; justify-content: center;
   color: var(--t4);
   transition: all 0.25s ease;
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 }
 .composer-send.ready {
   background: var(--g-azure);
   color: white;
-  box-shadow: 0 4px 12px rgba(56,189,248,0.3);
+  box-shadow: 0 4px 12px rgba(14,165,233,0.32);
 }
 .composer-send.composer-stop.ready {
   background: linear-gradient(135deg, #ef4444, #b91c1c);

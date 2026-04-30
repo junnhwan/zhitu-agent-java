@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Sparkles, Brain } from "lucide-react";
+import { Brain } from "lucide-react";
 import "./Workspace.css";
 
 export default function Workspace({
@@ -17,7 +17,7 @@ export default function Workspace({
     <>
       <header className="wk-header">
         <div className="wk-header-left">
-          <Sparkles size={18} className="wk-header-icon" />
+          <span className="wk-header-bar" aria-hidden />
           <h1 className="wk-header-title">{title}</h1>
         </div>
         <div className="wk-header-right">
@@ -27,7 +27,9 @@ export default function Workspace({
               {facts.length}
             </span>
           )}
-          <span className="wk-header-id">{sessionId ? `#${sessionId.slice(0, 8)}` : ""}</span>
+          {sessionId && (
+            <span className="wk-header-id" title={sessionId}>#{sessionId.slice(0, 8)}</span>
+          )}
         </div>
       </header>
 
