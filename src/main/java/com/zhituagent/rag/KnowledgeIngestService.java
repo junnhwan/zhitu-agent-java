@@ -4,23 +4,29 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class KnowledgeIngestService {
 
     private final DocumentSplitter documentSplitter;
     private final KnowledgeStore knowledgeStore;
-    private final AtomicInteger chunkCounter = new AtomicInteger(1);
+    private final ContextualChunkAnnotator contextualAnnotator;
 
     @Autowired
-    public KnowledgeIngestService(DocumentSplitter documentSplitter, KnowledgeStore knowledgeStore) {
+    public KnowledgeIngestService(DocumentSplitter documentSplitter,
+                                  KnowledgeStore knowledgeStore,
+                                  ContextualChunkAnnotator contextualAnnotator) {
         this.documentSplitter = documentSplitter;
         this.knowledgeStore = knowledgeStore;
+        this.contextualAnnotator = contextualAnnotator;
+    }
+
+    public KnowledgeIngestService(DocumentSplitter documentSplitter, KnowledgeStore knowledgeStore) {
+        this(documentSplitter, knowledgeStore, null);
     }
 
     public KnowledgeIngestService(DocumentSplitter documentSplitter) {
-        this(documentSplitter, new InMemoryKnowledgeStore());
+        this(documentSplitter, new InMemoryKnowledgeStore(), null);
     }
 
     public void ingest(String question, String answer, String sourceName) {
@@ -31,7 +37,12 @@ public class KnowledgeIngestService {
         }
 
         knowledgeStore.addAll(chunks.stream()
-                .map(chunk -> new KnowledgeChunk(sourceName, sourceName + "#" + chunkCounter.getAndIncrement(), chunk))
+                .map(chunk -> new KnowledgeChunk(
+                        sourceName,
+                        KnowledgeStoreIds.computeChunkId(sourceName, chunk),
+                        chunk,
+                        annotateForEmbedding(document, chunk)
+                ))
                 .toList());
     }
 
@@ -41,5 +52,13 @@ public class KnowledgeIngestService {
 
     public List<KnowledgeSnippet> lexicalSearch(String query, int limit) {
         return knowledgeStore.lexicalSearch(query, limit);
+    }
+
+    private String annotateForEmbedding(String document, String chunk) {
+        if (contextualAnnotator == null || !contextualAnnotator.isEnabled()) {
+            return null;
+        }
+        String embedText = contextualAnnotator.annotate(document, chunk);
+        return embedText == null || embedText.equals(chunk) ? null : embedText;
     }
 }

@@ -418,11 +418,64 @@ mvn -o spring-boot:run \
 
 ---
 
+### CR-1 ✅ Contextual Retrieval 三件套(2026-04-30 完成)
+
+**做了什么**
+
+CR 拆分:CR-1 做"零 schema 风险三件套",CR-2(真 BM25 + Flyway + jieba/tsvector)推迟到 v2 数字出来后再做。
+
+- **(a) chunkId 改 sha256** — `KnowledgeStoreIds.computeChunkId(source, content)` 用 SHA-256 取前 16 hex 字符,得到 `<source>#<hash>` 形式 chunkId。`KnowledgeIngestService` 删掉 `AtomicInteger chunkCounter`(原来重启漂移)。`InMemoryKnowledgeStore` 内部从 `CopyOnWriteArrayList<KnowledgeChunk>` 换成 `LinkedHashMap<chunkId, KnowledgeChunk>`,行为与 PgVectorEmbeddingStore.addAll 的 ON CONFLICT UPSERT 对齐。重复 ingest 不再产生重复 row,简历可挂"幂等 ingest"。
+- **(b) ContextualChunkAnnotator** — Anthropic Contextual Retrieval 落地:`@Component` 持有 `LlmRuntime + RagProperties`,在 `KnowledgeIngestService.ingest` 内部对每个 chunk 调 `annotate(fullDoc, chunk)` → 短上下文前缀,embed 用 `prefix\n\nchunk`。提示模板就是 Anthropic 官方 cookbook 的那段 `<document>... <chunk>... give a short succinct context...`。`KnowledgeChunk` record 加 `embedText` 字段(默认 null);`PgVectorKnowledgeStore.addAll` 走 `chunk.effectiveEmbedText()` 喂 embedding model,但 `metadata.rawText` 仍存原 chunk → `toSnippet` 取 rawText 优先,evidence/lexical 见到的还是干净的原文。`RagProperties.contextualEnabled=false` 默认关。LLM 失败/返回空 → 回退原文,**eval/CI 不破**。
+- **(c) RrfFusionMerger** — 新增 `RrfFusionMerger` 实现 Reciprocal Rank Fusion:`score = Σ 1/(60 + rank_i)`,只看排名不看分数,跨模式天然校准,不再需要 `RerankResultCalibrator` 那种手写 bonus。`HybridRetrievalMerger` 加 strategy switch,根据 `RagProperties.fusionStrategy=linear|rrf` dispatch。默认 `linear` 兼容现有 v1 数字;A-5 eval 时 toggle `rrf` 看 nDCG@5 提升幅度。
+
+**关键设计决策**
+
+1. **CR 拆 CR-1 / CR-2** — Flyway + Jieba + tsvector 一起 land 表迁移风险大,容易把 langchain4j EmbeddingStore 自动建表逻辑打架。先做"不动表"的三件套,跑 v2 eval 拿到数字,再回头评估真 BM25 是否还需要。简历叙事:"把高风险迁移和高 ROI 改造解耦,有数字驱动的优先级"。
+2. **chunkId 用 `<source>#<sha16>` 而非纯 sha** — chunkId 在 trace/log 里要可读,`source` 仍出现作为前缀肉眼可识别;sha 只取 16 hex (64 bit) 抗碰撞,KB 级 dataset 不可能撞。同时旧的 `KnowledgeStoreIds.toEmbeddingId(chunkId)` 仍把 chunkId 经 UUID v3 投到 stable UUID,pgvector 端 ON CONFLICT 自动 UPSERT。
+3. **embedText 不入 record canonical 字段以外的位置** — 只在内存 record 上携带,`metadata.rawText` 保存原文。这样 schema 不动(metadata 是 jsonb),`toSnippet` 取 `rawText` 优先回到原文。代价:metadata 多存一份原文(KB 级 chunk 才几百字符),收益:不破 pgvector 表 schema,CR-2 才动表。
+4. **Annotator 默认关 + LLM 失败回退** — 真 LLM 调用才有效,mock/test 路径不受影响;`isEnabled() && response.isBlank()` 兜底回退到原 chunk。这意味着 contextual 是"有就用、没有也能跑"的渐进 enhancement,A-5 eval 时打开比较 v1/v2 数字干净。
+5. **RRF 不需要分数校准** — RRF 的核心论点:不同检索器分数尺度不可比(cosine 0-1 vs ILIKE 整数计数),用 rank 替代是经典做法。简历可挂"用 RRF 替换手写线性加权 + bonus,业内对标 Pinecone/Vespa/Elastic 的标准做法"。
+6. **保留 0-arg `HybridRetrievalMerger()`** — `RagRetriever` 内部老的 4-arg 构造器还在用 `new HybridRetrievalMerger()`,保留 0-arg 便利构造器(默认 RagProperties + 默认 RrfFusionMerger),不破老代码。
+
+**改动文件**
+
+```
+新增   src/main/java/com/zhituagent/rag/ContextualChunkAnnotator.java
+新增   src/main/java/com/zhituagent/rag/RrfFusionMerger.java
+修改   src/main/java/com/zhituagent/rag/KnowledgeStoreIds.java       # +computeChunkId
+修改   src/main/java/com/zhituagent/rag/KnowledgeChunk.java          # +embedText +effectiveEmbedText
+修改   src/main/java/com/zhituagent/rag/KnowledgeIngestService.java  # sha256 chunkId + Annotator 钩子
+修改   src/main/java/com/zhituagent/rag/InMemoryKnowledgeStore.java  # LinkedHashMap UPSERT
+修改   src/main/java/com/zhituagent/rag/PgVectorKnowledgeStore.java  # effectiveEmbedText + rawText metadata
+修改   src/main/java/com/zhituagent/rag/HybridRetrievalMerger.java   # +RagProperties+RrfFusionMerger strategy switch
+修改   src/main/java/com/zhituagent/config/RagProperties.java        # +contextualEnabled +fusionStrategy
+新增   src/test/java/com/zhituagent/rag/KnowledgeIngestServiceIdempotencyTest.java  # 4 cases
+新增   src/test/java/com/zhituagent/rag/ContextualChunkAnnotatorTest.java          # 5 cases
+新增   src/test/java/com/zhituagent/rag/RrfFusionMergerTest.java                   # 5 cases
+修改   src/test/java/com/zhituagent/rag/KnowledgeStoreIdsTest.java                 # +5 cases
+修改   src/test/java/com/zhituagent/rag/HybridRetrievalMergerTest.java             # +2 cases (strategy switch)
+```
+
+测试:`mvn -o test` 80/80 全绿(+21 新)。
+
+**怎么开 v2**: `application-local.yml`:
+```yaml
+zhitu:
+  rag:
+    contextual-enabled: true
+    fusion-strategy: rrf
+  app:
+    react-enabled: true
+```
+A-5 跑 v2 baseline 时所有三件套同时启用,与 v1 对比表的"对照量"就是这三个 flag 的 false→true。
+
+---
+
 ## 阶段 2 — 差异化亮点(待开始)
 
 7 个子任务,任挑两三个写进简历即可:
 - ✅ ReAct/StateGraph 循环(LangGraph 对标)— 见 SG 段落
-- Anthropic Contextual Retrieval + 真 BM25 + RRF
+- ✅ Anthropic Contextual Retrieval + 真 BM25 + RRF — 见 CR-1 段落(CR-2 真 BM25 推迟)
 - Self-RAG / CRAG 检索充分性评估
 - MemGPT / Mem0 风格 memory(LLM 抽取 + add/update/merge + reflection)
 - MCP 客户端

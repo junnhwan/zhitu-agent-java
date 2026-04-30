@@ -8,6 +8,8 @@ public class RagProperties {
     private boolean hybridEnabled = true;
     private int lexicalTopK = 10;
     private double minAcceptedScore = 0.15;
+    private boolean contextualEnabled = false;
+    private String fusionStrategy = "linear";
 
     public boolean isHybridEnabled() {
         return hybridEnabled;
@@ -31,5 +33,21 @@ public class RagProperties {
 
     public void setMinAcceptedScore(double minAcceptedScore) {
         this.minAcceptedScore = minAcceptedScore;
+    }
+
+    public boolean isContextualEnabled() {
+        return contextualEnabled;
+    }
+
+    public void setContextualEnabled(boolean contextualEnabled) {
+        this.contextualEnabled = contextualEnabled;
+    }
+
+    public String getFusionStrategy() {
+        return fusionStrategy;
+    }
+
+    public void setFusionStrategy(String fusionStrategy) {
+        this.fusionStrategy = fusionStrategy;
     }
 }

@@ -47,8 +47,10 @@ public class PgVectorKnowledgeStore implements KnowledgeStore {
 
         List<TextSegment> segments = chunks.stream()
                 .map(chunk -> TextSegment.from(
-                        chunk.content(),
-                        Metadata.from("source", chunk.source()).put("chunkId", chunk.chunkId())
+                        chunk.effectiveEmbedText(),
+                        Metadata.from("source", chunk.source())
+                                .put("chunkId", chunk.chunkId())
+                                .put("rawText", chunk.content())
                 ))
                 .toList();
 
@@ -136,7 +138,9 @@ public class PgVectorKnowledgeStore implements KnowledgeStore {
         TextSegment embedded = match.embedded();
         String source = embedded.metadata().getString("source");
         String chunkId = embedded.metadata().getString("chunkId");
-        return new KnowledgeSnippet(source, chunkId, match.score(), embedded.text());
+        String rawText = embedded.metadata().getString("rawText");
+        String content = rawText != null && !rawText.isBlank() ? rawText : embedded.text();
+        return new KnowledgeSnippet(source, chunkId, match.score(), content);
     }
 
     private EmbeddingModel getEmbeddingModel() {
