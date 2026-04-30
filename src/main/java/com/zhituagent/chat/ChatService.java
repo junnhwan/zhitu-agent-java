@@ -10,11 +10,13 @@ import com.zhituagent.llm.LlmRuntime;
 import com.zhituagent.memory.MemoryService;
 import com.zhituagent.metrics.ChatMetricsRecorder;
 import com.zhituagent.metrics.ToolMetricsRecorder;
+import com.zhituagent.orchestrator.AgentLoop;
 import com.zhituagent.orchestrator.AgentOrchestrator;
 import com.zhituagent.orchestrator.RouteDecision;
 import com.zhituagent.rag.RetrievalMode;
 import com.zhituagent.rag.RetrievalRequestOptions;
 import com.zhituagent.session.SessionService;
+import com.zhituagent.tool.ToolResult;
 import com.zhituagent.trace.SpanCollector;
 import com.zhituagent.trace.TraceArchiveService;
 import org.slf4j.Logger;
@@ -38,11 +40,14 @@ public class ChatService {
     private final MemoryService memoryService;
     private final ContextManager contextManager;
     private final AgentOrchestrator agentOrchestrator;
+    private final AgentLoop agentLoop;
     private final ChatTraceFactory chatTraceFactory;
     private final ChatMetricsRecorder chatMetricsRecorder;
     private final ToolMetricsRecorder toolMetricsRecorder;
     private final TraceArchiveService traceArchiveService;
     private final SpanCollector spanCollector;
+    private final boolean reactEnabled;
+    private final int reactMaxIters;
     private final String systemPrompt;
 
     public ChatService(LlmRuntime llmRuntime,
@@ -50,6 +55,7 @@ public class ChatService {
                        MemoryService memoryService,
                        ContextManager contextManager,
                        AgentOrchestrator agentOrchestrator,
+                       AgentLoop agentLoop,
                        ChatTraceFactory chatTraceFactory,
                        ChatMetricsRecorder chatMetricsRecorder,
                        ToolMetricsRecorder toolMetricsRecorder,
@@ -62,11 +68,14 @@ public class ChatService {
         this.memoryService = memoryService;
         this.contextManager = contextManager;
         this.agentOrchestrator = agentOrchestrator;
+        this.agentLoop = agentLoop;
         this.chatTraceFactory = chatTraceFactory;
         this.chatMetricsRecorder = chatMetricsRecorder;
         this.toolMetricsRecorder = toolMetricsRecorder;
         this.traceArchiveService = traceArchiveService;
         this.spanCollector = spanCollector;
+        this.reactEnabled = appProperties.isReactEnabled();
+        this.reactMaxIters = appProperties.getReactMaxIters();
         Resource resource = resourceLoader.getResource(appProperties.getSystemPromptLocation());
         this.systemPrompt = resource.getContentAsString(StandardCharsets.UTF_8);
     }
@@ -140,11 +149,32 @@ public class ChatService {
             String llmSpan = spanCollector.startSpan("llm.generate", "llm");
             String answer = "";
             try {
-                answer = llmRuntime.generate(
-                        systemPrompt,
-                        contextBundle.modelMessages(),
-                        safeMetadata
-                );
+                if (reactEnabled && !routeDecision.retrievalHit()) {
+                    AgentLoop.LoopResult loopResult = agentLoop.run(
+                            systemPrompt,
+                            message,
+                            contextBundle,
+                            safeMetadata,
+                            reactMaxIters
+                    );
+                    answer = loopResult.finalAnswer();
+                    if (!loopResult.executions().isEmpty()) {
+                        ToolResult firstSuccess = loopResult.firstSuccessfulResult();
+                        if (firstSuccess == null && !loopResult.executions().isEmpty()) {
+                            firstSuccess = loopResult.executions().get(0).result();
+                        }
+                        if (firstSuccess != null) {
+                            routeDecision = RouteDecision.tool(firstSuccess.toolName(), firstSuccess);
+                            recordToolMetric(routeDecision);
+                        }
+                    }
+                } else {
+                    answer = llmRuntime.generate(
+                            systemPrompt,
+                            contextBundle.modelMessages(),
+                            safeMetadata
+                    );
+                }
             } finally {
                 spanCollector.endSpan(llmSpan, "ok", Map.of("answerLength", answer == null ? 0 : answer.length()));
             }

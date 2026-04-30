@@ -374,10 +374,54 @@ mvn -o spring-boot:run \
 
 ---
 
+### SG ✅ ReAct 多轮循环(2026-04-30 完成)
+
+**做了什么**
+
+把"单次 LLM 工具决策 → 单次 LLM 生成答案"升级到"LLM ⇄ 工具多轮 ReAct 循环",最大 4 轮。新增 `orchestrator/AgentLoop` 单类替代完整 StateGraph 框架(避免 7-node 过度设计):
+
+- `LlmRuntime` 加新方法 `generateChatTurn(systemPrompt, List<ChatMessage>, tools, metadata)` — 接受类型化 ChatMessage 而非字符串前缀,可正确 round-trip `AiMessage(toolCalls)` 与 `ToolExecutionResultMessage(toolCallId, name, content)`(OpenAI tool_call_id 协议)。default 实现 fallback 到 `generateWithTools` + 字符串化(测试 stub 默认走得通)
+- `LangChain4jLlmRuntime.generateChatTurn` 真路径用 `ChatRequest.builder().messages(typed).toolSpecifications(specs).build()` + `ChatModel.chat(req)`
+- 新增 `orchestrator/AgentLoop`:
+  - `run(systemPrompt, userMessage, contextBundle, metadata, maxIters)` 返回 `LoopResult{finalAnswer, iterations, converged, executions, firstResultByTool}`
+  - 每轮 = 1 个 `agent.iter` span,内嵌 1 个 `agent.llm_call` span;有工具调用时再起 1 个 `agent.tool_calls` span。失败时 `endSpan` 状态为 `continue`,完成时为 `ok`
+  - LLM 输出 text(无 toolCalls) → finalAnswer,converged=true 退出
+  - LLM 输出 toolCalls → 拼 `AiMessage.from(text, toolCalls)` 进 conversation,`ToolCallExecutor.executeAll(...)` 并行执行,每个结果转 `ToolExecutionResultMessage` 接到 conversation 尾,继续下一轮
+  - 触顶 maxIters 仍未收敛 → `composeStepLimitFallback`:`"[reached step limit] partial observations: [time] current time is X; ..."`
+- `bootstrap(contextBundle, userMessage)`:把 `contextBundle.modelMessages` 字符串前缀(SUMMARY:/EVIDENCE:/USER:/ASSISTANT:)还原成类型化 ChatMessage,确保新旧 ContextBundle 都能喂给 ReAct 循环。最后兜底:若末尾不是 UserMessage,补一条
+- `AppProperties` 加 `react-enabled` (default `false`) + `react-max-iters` (default `4`):**默认关闭,完全向后兼容**;A-5 跑 v2 eval 时打开
+- `ChatService.chat()`:`reactEnabled && !routeDecision.retrievalHit()` 时走 `agentLoop.run(...)` 替代单次 `llmRuntime.generate(...)`;循环结束后从 `LoopResult.firstSuccessfulResult()` 反推 `RouteDecision.tool(...)`,trace/SSE/archive 全套 schema 不变
+
+**关键设计决策**
+
+1. **单类 `AgentLoop` 不是 7-node StateGraph** — 当前节点只有 LlmCall 与 CallTool 两类,自循环。Plan/Reflect/Self-RAG/Route 都在外层(orchestrator.decide 已做 RAG check)或下个子任务(SR)再做。如果硬塞 7 个节点类全是空 stub,测试覆盖反而稀薄。等 SR/HL 阶段需要更复杂条件边时再升级到真正的 StateGraph 框架(可考虑 langgraph4j 或自研 DSL)
+2. **`react-enabled` 默认 false** — 不破坏现有 ChatControllerTest / ObservabilityEndpointTest 等 16 个集成测试。ReAct 路径通过 `AgentLoopTest` 直接验证。A-5 真 eval 时打开比较 v1 (false) vs v2 (true)
+3. **`generateChatTurn` 单独走** — 没有把 `generateWithTools` 升级成接受 `List<ChatMessage>`,因为现有 `AgentOrchestrator.decide()` 单次 tool selection 仍依赖字符串前缀(老接口够用),A-2 兼容性不破。两个方法并存:单次决策用 string,多轮循环用 ChatMessage
+4. **Span 嵌套 3 层** — `chat.turn`(root)→ `agent.iter`(每轮)→ `agent.llm_call` / `agent.tool_calls`。前端 SpanTree(T2)直接渲染时间轴树。简历可挂"我用嵌套 span 实现了 LangSmith 风格的 trace tree,每轮迭代独立可视化"
+5. **`composeStepLimitFallback` 把 partial observation 拼成兜底答案** — 比单纯返回空字符串更能体现"reached step limit but here's what I found"。LLM 后续可基于此判断是否需要重新提问
+6. **保留 `RouteDecision.tool` 单一形状** — `firstResultByTool` map 携带多工具明细,但 `RouteDecision` 只记录"第一个成功的工具",ChatService.trace 仍走旧 path。多工具完整明细在 trace span attributes 里展开
+
+**改动文件**
+
+```
+新增   src/main/java/com/zhituagent/orchestrator/AgentLoop.java          # 单类 ReAct 循环
+修改   src/main/java/com/zhituagent/llm/LlmRuntime.java                  # +generateChatTurn default
+修改   src/main/java/com/zhituagent/llm/LangChain4jLlmRuntime.java       # generateChatTurn 真实现
+修改   src/main/java/com/zhituagent/config/AppProperties.java            # +reactEnabled+maxIters
+修改   src/main/java/com/zhituagent/chat/ChatService.java                # reactEnabled 分支调 AgentLoop
+新增   src/test/java/com/zhituagent/orchestrator/AgentLoopTest.java      # 多轮收敛 + maxIter fallback
+```
+
+测试:`mvn -o test` 59/59 全绿(+2 新)。
+
+**怎么开 v2**: `application-local.yml` 加 `zhitu.app.react-enabled: true` 即可。下次 A-5 eval 会自动跑通 ReAct 路径。
+
+---
+
 ## 阶段 2 — 差异化亮点(待开始)
 
 7 个子任务,任挑两三个写进简历即可:
-- ReAct/StateGraph 循环(LangGraph 对标)
+- ✅ ReAct/StateGraph 循环(LangGraph 对标)— 见 SG 段落
 - Anthropic Contextual Retrieval + 真 BM25 + RRF
 - Self-RAG / CRAG 检索充分性评估
 - MemGPT / Mem0 风格 memory(LLM 抽取 + add/update/merge + reflection)

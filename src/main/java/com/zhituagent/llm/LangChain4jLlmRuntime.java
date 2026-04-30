@@ -155,6 +155,49 @@ public class LangChain4jLlmRuntime implements LlmRuntime {
         return mocked;
     }
 
+    @Override
+    public ChatTurnResult generateChatTurn(String systemPrompt,
+                                           List<ChatMessage> messages,
+                                           List<ToolSpecification> tools,
+                                           Map<String, Object> metadata) {
+        long startNanos = System.nanoTime();
+        if (shouldUseRealProvider()) {
+            try {
+                List<ChatMessage> typedMessages = new ArrayList<>();
+                if (isNotBlank(systemPrompt)) {
+                    typedMessages.add(SystemMessage.from(systemPrompt));
+                }
+                if (messages != null) {
+                    typedMessages.addAll(messages);
+                }
+                ChatRequest.Builder builder = ChatRequest.builder().messages(typedMessages);
+                if (tools != null && !tools.isEmpty()) {
+                    builder.toolSpecifications(tools);
+                }
+                ChatResponse response = getChatModel().chat(builder.build());
+                AiMessage aiMessage = response.aiMessage();
+                String text = aiMessage == null || aiMessage.text() == null ? "" : aiMessage.text();
+                List<ToolExecutionRequest> toolCalls = aiMessage != null && aiMessage.hasToolExecutionRequests()
+                        ? aiMessage.toolExecutionRequests()
+                        : List.of();
+                long latencyMs = elapsedMillis(startNanos);
+                aiMetricsRecorder.recordRequest(properties.getModelName(), "generate-chat-turn", true, latencyMs);
+                log.info(
+                        "模型多轮调用完成 llm.generate_chat_turn.completed provider=openai-compatible messageCount={} toolCalls={} model={} latencyMs={}",
+                        typedMessages.size(),
+                        toolCalls.size(),
+                        properties.getModelName(),
+                        latencyMs
+                );
+                return new ChatTurnResult(text, toolCalls);
+            } catch (RuntimeException exception) {
+                aiMetricsRecorder.recordRequest(properties.getModelName(), "generate-chat-turn", false, elapsedMillis(startNanos));
+                throw exception;
+            }
+        }
+        return LlmRuntime.super.generateChatTurn(systemPrompt, messages, tools, metadata);
+    }
+
     private ChatTurnResult mockToolSelection(List<String> messages, List<ToolSpecification> tools) {
         String latestMessage = messages.isEmpty() ? "" : messages.get(messages.size() - 1);
         String stripped = latestMessage == null ? "" : latestMessage.toLowerCase();
