@@ -8,6 +8,8 @@ import com.zhituagent.rag.RetrievalMode;
 import com.zhituagent.rag.RetrievalRequestOptions;
 import com.zhituagent.session.SessionService;
 import com.zhituagent.rag.KnowledgeIngestService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -29,6 +31,8 @@ import java.util.function.ToDoubleFunction;
 
 @Component
 class BaselineEvalRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(BaselineEvalRunner.class);
 
     private final ChatService chatService;
     private final SessionService sessionService;
@@ -83,7 +87,13 @@ class BaselineEvalRunner {
                                           String modeLabel) throws Exception {
         List<BaselineEvalResult.CaseResult> results = new ArrayList<>();
         for (BaselineEvalCase evalCase : cases) {
-            results.add(runCase(evalCase, retrievalMode, modeLabel));
+            try {
+                results.add(runCase(evalCase, retrievalMode, modeLabel));
+            } catch (RuntimeException exception) {
+                log.error("eval case failed caseId={} mode={} reason={}",
+                        evalCase.caseId(), modeLabel, exception.getMessage());
+                results.add(buildErrorResult(evalCase, retrievalMode, modeLabel, exception));
+            }
         }
 
         long topSourceCheckCount = results.stream()
@@ -274,6 +284,50 @@ class BaselineEvalRunner {
                 answerKeywordCoverage,
                 evalCase.splitMode()
         );
+    }
+
+    private BaselineEvalResult.CaseResult buildErrorResult(BaselineEvalCase evalCase,
+                                                           RetrievalMode retrievalMode,
+                                                           String modeLabel,
+                                                           RuntimeException exception) {
+        String sessionId = "eval_" + modeLabel.replace('-', '_') + "_" + evalCase.caseId() + "_errored_" + shortId();
+        String expectedPath = evalCase.expectedPath();
+        String expectedContextStrategy = evalCase.expectedContextStrategy() == null ? "" : evalCase.expectedContextStrategy();
+        int expectedFactCountAtLeast = evalCase.expectedFactCountAtLeast() == null ? 0 : Math.max(0, evalCase.expectedFactCountAtLeast());
+        List<String> relevantSourceIds = evalCase.relevantSourceIds();
+        List<String> expectedAnswerKeywords = evalCase.expectedAnswerKeywords();
+        boolean rankingCheckApplied = !relevantSourceIds.isEmpty();
+        boolean keywordCheckApplied = !expectedAnswerKeywords.isEmpty();
+
+        return new BaselineEvalResult.CaseResult(
+                evalCase.caseId(),
+                evalCase.type(),
+                sessionId,
+                expectedPath,
+                "errored",
+                false,
+                evalCase.expectedRetrievalHit(), false, false,
+                evalCase.expectedToolUsed(), false, false,
+                evalCase.expectedSummaryPresentBeforeRun(), false, false,
+                "", false, false,
+                expectedContextStrategy, retrievalMode.value(), "",
+                false, false,
+                expectedFactCountAtLeast, 0, evalCase.expectedFactCountAtLeast() != null, false,
+                0, 0, "", 0.0, "", 0.0,
+                0L, 0L, 0L,
+                "ERROR: " + truncate(exception.getMessage(), 200),
+                relevantSourceIds, List.of(),
+                rankingCheckApplied, false, 0.0, 0.0, 0.0,
+                expectedAnswerKeywords, keywordCheckApplied, 0.0,
+                evalCase.splitMode()
+        );
+    }
+
+    private String truncate(String value, int max) {
+        if (value == null) {
+            return "";
+        }
+        return value.length() <= max ? value : value.substring(0, max) + "...";
     }
 
     private List<BaselineEvalCase> loadCases(String resourcePath) throws IOException {

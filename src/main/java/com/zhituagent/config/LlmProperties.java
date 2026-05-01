@@ -9,6 +9,7 @@ public class LlmProperties {
     private String baseUrl = "";
     private String apiKey = "";
     private String modelName = "mock-agent";
+    private final RateLimit rateLimit = new RateLimit();
 
     public boolean isMockMode() {
         return mockMode;
@@ -40,5 +41,49 @@ public class LlmProperties {
 
     public void setModelName(String modelName) {
         this.modelName = modelName;
+    }
+
+    public RateLimit getRateLimit() {
+        return rateLimit;
+    }
+
+    public static class RateLimit {
+
+        private boolean enabled = false;
+        private int limitForPeriod = 48;
+        private long limitRefreshPeriodSeconds = 60;
+        private long timeoutSeconds = 120;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getLimitForPeriod() {
+            return limitForPeriod;
+        }
+
+        public void setLimitForPeriod(int limitForPeriod) {
+            this.limitForPeriod = limitForPeriod;
+        }
+
+        public long getLimitRefreshPeriodSeconds() {
+            return limitRefreshPeriodSeconds;
+        }
+
+        public void setLimitRefreshPeriodSeconds(long limitRefreshPeriodSeconds) {
+            this.limitRefreshPeriodSeconds = limitRefreshPeriodSeconds;
+        }
+
+        public long getTimeoutSeconds() {
+            return timeoutSeconds;
+        }
+
+        public void setTimeoutSeconds(long timeoutSeconds) {
+            this.timeoutSeconds = timeoutSeconds;
+        }
     }
 }

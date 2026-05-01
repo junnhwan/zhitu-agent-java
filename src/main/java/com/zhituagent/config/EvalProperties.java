@@ -13,6 +13,8 @@ public class EvalProperties {
     private String fixtureResource = "eval/baseline-chat-cases.jsonl";
     private String reportDir = "target/eval-reports";
     private List<String> modes = new ArrayList<>(List.of("dense", "dense-rerank", "hybrid-rerank"));
+    private String label = "";
+    private List<String> compareLabels = new ArrayList<>();
 
     public boolean isEnabled() {
         return enabled;
@@ -52,5 +54,21 @@ public class EvalProperties {
 
     public void setModes(List<String> modes) {
         this.modes = modes == null ? new ArrayList<>() : new ArrayList<>(modes);
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label == null ? "" : label;
+    }
+
+    public List<String> getCompareLabels() {
+        return compareLabels;
+    }
+
+    public void setCompareLabels(List<String> compareLabels) {
+        this.compareLabels = compareLabels == null ? new ArrayList<>() : new ArrayList<>(compareLabels);
     }
 }

@@ -126,30 +126,9 @@ aggregate: `meanRecallAt5 = 0.833`, `meanNdcgAt5 = 0.871`, `rankingCheckedCases 
 
 ---
 
-### C-3 ⏸ 跑 v1 基线并归档(命令 ready,推迟到 A-5 一起跑)
+### C-3 ✅ 跑 v1 / v2 真 LLM baseline + 对比报告(2026-05-01 完成,见 A-5)
 
-**为什么推迟**
-- API 成本: 48 LLM calls + 16 embedding + ~30 rerank ≈ $1 量级
-- 数据隔离: 默认 `ZHITU_PGVECTOR_TABLE=zhitu_agent_knowledge` 是 prod 库,eval seed 会污染。需要先准备隔离表 `zhitu_agent_eval`。
-- ROI: A-5 阶段必须跑 v2 baseline,届时一次跑 v1 + v2 节省一半 API 开销。
-
-**运行命令(供未来直接复制)**
-
-```bash
-# 准备隔离表
-psql ... -c "CREATE TABLE zhitu_agent_eval (LIKE zhitu_agent_knowledge INCLUDING ALL);"
-
-# 跑 eval
-ZHITU_PGVECTOR_TABLE=zhitu_agent_eval \
-ZHITU_LLM_MOCK_MODE=false \
-mvn -o spring-boot:run \
-  -Dspring-boot.run.profiles=local \
-  -Dspring-boot.run.arguments="--zhitu.eval.enabled=true --zhitu.eval.exit-after-run=true"
-
-# 报告产物在 target/eval-reports/baseline-comparison-*.json
-```
-
-跑完把数字 paste 进本文档对应表格即可。
+> C-3 与 A-5 在同一次会话里一并完成 — A-5 段落给出完整流程(toggle wiring / RateLimiter / ComparisonReporter)与数字对比。这里仅留指针。
 
 ---
 
@@ -333,7 +312,94 @@ mvn -o spring-boot:run \
 
 ---
 
-### T1 ✅ Span 树 + SseEventType 枚举(后端)(2026-04-30 完成)
+### A-5 ✅ v1 / v2 真 LLM baseline + 对比报告(2026-05-01 完成)
+
+**做了什么**
+
+把"代码已就绪、缺真数字"的局面闭环 —— 让 BaselineEvalRunner 能用同一份 fixture 在两套 flag 配置下分别跑,然后把两份报告 merge 成 v1↔v2 对比表(markdown + json),作为简历核心数字。
+
+- 新增 `llm/LlmRateLimiter`(Resilience4j `RateLimiter` 包装):4 个 LLM 真调用入口(`generate / generateWithTools / generateChatTurn / stream`)前 `acquire("operation")`,timeout 内拿不到 token 抛 `RequestNotPermitted`;`enabled=false` 时是 no-op。Micrometer metrics 自动 bind 到 Actuator
+- `LlmProperties` 加嵌套 `RateLimit` 配置类:`enabled / limitForPeriod=48 / limitRefreshPeriodSeconds=60 / timeoutSeconds=120`(对齐 GLM-5.1 的 48 calls/min 限速)
+- `EvalProperties` 加 `label`(eval 跑出文件名 token)+ `compareLabels`(非空触发 reporter 模式)两个字段
+- `EvalApplicationRunner` 分两支:`compareLabels` 非空 → `BaselineComparisonReporter.compareLatest(...)`;否则按 `label` 命名输出 `baseline-{label}-{ts}.json`
+- 新增 `eval/BaselineComparisonReporter`:扫 reportDir 找最新一份 `baseline-{label}-*.json`(支持任意 N 个 label),按 mode 对齐,输出
+  - `baseline-compare-v1-vs-v2-{ts}.json`(完整结构化数据,含 aggregate / split / per-case 三层)
+  - `baseline-compare-v1-vs-v2-{ts}.md`(人类可读对比表,标准 markdown)
+- `LangChain4jLlmRuntime` 注入 `LlmRateLimiter`(3-arg @Autowired 构造器 + 1-arg / 2-arg fallback 走 `LlmRateLimiter.disabled()` no-op)
+
+**关键设计决策**
+
+1. **RateLimiter 用 Resilience4j 而非 Guava / Semaphore** —— Resilience4j 是业内最主流的弹性库,生态有 `circuitbreaker / bulkhead / retry / timelimiter` 全家桶,且原生 Micrometer metrics。简历可挂"用 Resilience4j RateLimiter 保护下游 LLM API,Actuator 自动暴露 `resilience4j_ratelimiter_*` 指标"。
+2. **限流粒度选 wrapper 层而非 chatModel 内部** —— 把 `acquire()` 放在 `LangChain4jLlmRuntime` 4 个入口,而不是去改 LangChain4j 的 ChatModel 实现。优点:换 provider(从 OpenAI 兼容 → 真 Anthropic SDK)时限流逻辑不需要再写一遍;缺点:每个新增入口都要记得加 acquire,但目前所有入口都收敛在这一个类。
+3. **v1/v2 走"启动两次 + 独立 Reporter"而非单次跑两组** —— 单次跑两组要在 runtime 切 `react-enabled / contextual-enabled / fusion-strategy / self-rag-enabled` 4 个 ConfigurationProperties 字段,这些 bean 在 `@PostConstruct` 已经初始化了下游对象(如 `SelfRagOrchestrator` 持有自己的 maxRewrites),runtime 切换会侵入到很多地方。两次启动方案零侵入,缺点是用户要起两次进程 —— 在 eval 这种偶发场景里完全可接受。
+4. **`baseline-{label}-{ts}.json` 文件名带 label 是为了可重复对比** —— 任意 N 个 label 都可以随时再跑出新报告,reporter `findLatestReport` 永远拿同一 label 下最新的。简历可挂"v3 / v4 后续优化沿用同一套对比框架,改 reporter args 即可重生成对比表"。
+5. **Reporter 同时输出 JSON + Markdown** —— JSON 给后续脚本/diff/CI 工具消费,Markdown 直接 paste 进 progress.md / 简历 / blog。这是 BEIR / MTEB 报告的标准做法。
+6. **per-case 表只列 nDCG@5 一个核心指标** —— Markdown 表如果列全 8 个指标会爆宽。nDCG@5 同时反映 hit + ranking 质量,信息密度最高。完整数据在 JSON 里,需要时再展开。
+
+**改动文件**
+
+```
+新增   src/main/java/com/zhituagent/llm/LlmRateLimiter.java
+修改   src/main/java/com/zhituagent/llm/LangChain4jLlmRuntime.java     # +acquire 4 处
+修改   src/main/java/com/zhituagent/config/LlmProperties.java          # +RateLimit 嵌套类
+修改   src/main/java/com/zhituagent/config/EvalProperties.java         # +label +compareLabels
+修改   src/main/java/com/zhituagent/eval/EvalApplicationRunner.java    # 双分支:fixture run / compare run
+新增   src/main/java/com/zhituagent/eval/BaselineComparisonReporter.java  # JSON + Markdown 双输出
+修改   pom.xml                                                          # +resilience4j-ratelimiter +micrometer
+新增   src/test/java/com/zhituagent/llm/LlmRateLimiterTest.java         # 4 cases
+新增   src/test/java/com/zhituagent/eval/BaselineComparisonReporterTest.java  # 2 cases
+```
+
+测试:`mvn -o test` 122/122 全绿(+6 新)。
+
+**v1 vs v2 真 LLM 数字**(GLM-5.1 / Qwen3-Embedding-8B / Qwen3-Reranker-8B,16 case × hybrid-rerank,zhitu_agent_eval 隔离表,2026-05-01 跑)
+
+> 跑两组各 16 case 共 ~120 LLM call,总耗时 16 min(v1 6:50min + v2 9:40min + compare 6s)。
+
+| 指标 | v1 | v2 | Δ |
+|---|---|---|---|
+| 通过率 | 16/16 (100%) | 12/16 (75%) | **-25%** ❌ |
+| routeAccuracy | 1.000 | 0.750 | -0.250 |
+| meanRecallAt5 | 1.000 | 0.500 | **-0.500** ❌ |
+| meanMrrAt5 | 1.000 | 0.500 | **-0.500** ❌ |
+| meanNdcgAt5 | 1.000 | 0.500 | **-0.500** ❌ |
+| meanAnswerKeywordCoverage | 1.000 | 0.833 | -0.167 |
+| avgLatencyMs | 24082 | 31599 | +7517 (self-rag iter 成本) |
+| p90LatencyMs | 50308 | 42259 | -8049 |
+
+| split | v1 通过 | v2 通过 | v1 nDCG | v2 nDCG |
+|---|---|---|---|---|
+| train (n=12) | 12/12 | 9/12 | 1.000 | 0.500 |
+| **eval holdout (n=4)** | **4/4** | **3/4** | **1.000** | **0.500** |
+
+> 简历核心:**eval holdout 也跌**,说明 v2 不是过拟合 fixture,是真的回归。问题集中在 4 个 `rag-simple-*` case,nDCG 从 1.000 直接掉到 0.000。
+
+**🎯 意外结果诊断**(简历叙事金矿)
+
+预期 v2 全面碾压 v1,实际反过来。3 步定位:
+
+1. **per-case 表识别异常**:对比报告中 `rag-simple-002~005` 4 个 case 的 v1 nDCG=1.000 → v2 nDCG=0.000;其他 12 个 case v1=v2=1.000。说明问题与"single-doc rag-simple" 这一类 case 强相关。
+2. **actualPath 分流定位**:解析两份 baseline JSON 的 `actualPath`,发现 v2 在 4 个回归 case 上从 `retrieve-then-answer` 退化到 `direct-answer`;`retrievedSources` 为空 list。意味着检索流程触发了,但所有候选被全部拒绝了。
+3. **score 拒绝阈值锁定根因**:eval log 中观测到 `RAG 候选已拒绝 reason=low_score topScore=0.0333 minAcceptedScore=0.1500`,与 RRF 公式 `score = 1/(60+rank_dense) + 1/(60+rank_lexical) ≈ 0.0333` 完全吻合。结论:**`RrfFusionMerger` 输出的分数尺度(0.01~0.06)与 `RagRetriever` 用的 `minScore=0.15`(为 dense cosine [0,1] 设计)不兼容**,fusion 后所有候选被全部过滤掉。
+
+**为什么没在单元测试里被抓**: `RrfFusionMerger` 自带的单测是 list-vs-list 验证,从来没经过 `RagRetriever.minScore` 这一关;v1 默认 fusion-strategy=linear 用的是 cosine 加权,score 仍在 [0,1] 量级,所以 minScore=0.15 一直 work。这是 CR-1 阶段的 silent bug,**只有跑 end-to-end eval 才会暴露**。这一段就是简历"评测体系真的能抓住单测漏过的回归"的实证。
+
+**修复路线(A-6 子任务)**: 把 minScore 改为 mode-aware(linear/dense 用 0.15,rrf 用 0.001),或给 RRF score 加 normalization 投到 [0,1]。改 ~5 行,A-7 重跑 v2 拿"v2 反超 v1"的最终数字。
+
+**v1 / v2 配置差异**
+
+| 维度 | v1 | v2 | 对应改造 |
+|---|---|---|---|
+| `react-enabled` | false | true | SG (AgentLoop ReAct) |
+| `contextual-enabled` | false | true | CR-1 (Anthropic Contextual Retrieval) |
+| `fusion-strategy` | linear | rrf | CR-1 (Reciprocal Rank Fusion) |
+| `self-rag-enabled` | false | true | SR (Self-RAG sufficiency critique) |
+
+**简历叙事**: 这一段把 A-5 从"代码已落地"提到"评测真的发挥作用 — 用 holdout 拍出了一个生产改造里不容易发现的 silent bug"。比"v2 全面碾压 v1"的故事更有可信度。三幕剧:发现(对比指标异常)→ 诊断(per-case + log)→ 修复(A-6)。
+
+---
+
+
 
 **做了什么**
 
@@ -730,19 +796,65 @@ zhitu:
 
 ---
 
-## 阶段 2 — 差异化亮点(待开始)
+### UI ✅ 设计 pass — tokens / hash hue / iMessage 气泡 / 引导卡 / Trace 折叠(2026-05-01 完成)
 
-7 个子任务,任挑两三个写进简历即可:
-- ✅ ReAct/StateGraph 循环(LangGraph 对标)— 见 SG 段落
-- ✅ Anthropic Contextual Retrieval + 真 BM25 + RRF — 见 CR-1 段落(CR-2 真 BM25 推迟)
-- ✅ Self-RAG / CRAG 检索充分性评估 — 见 SR 段落
-- ✅ Trace 升 span 树 + 前端 TraceTree(LangSmith 对标)— 见 T2 段落
-- ✅ HITL(Anthropic computer use 对标)— 见 HL.a(后端)+ HL.b(前端)段落
-- ✅ MCP 客户端(Model Context Protocol)— 见 MCP 段落
-- MemGPT / Mem0 风格 memory(LLM 抽取 + add/update/merge + reflection)
-- MCP 客户端
-- HITL(@RequireApproval + SSE tool_call_pending)
-- Trace 升 span 树 + 前端 TraceTree
+**做了什么**
+
+把"功能可用、视觉扁平"的前端拉到"产品级品味"水平,11 个文件 +573/-250。改造分 7 块:
+
+- **App.css**:6 step font scale + 3 step radius + `--content-max=760px`;azure 主色加深到 `#0ea5e9` 配 cream bg 对比度提升
+- **Sidebar**:数字 label → 首字符 token + 每个 session 的 hue 由 `sessionId` hash 派生(同一个 session 永远同色,跨 session 视觉可区分)
+- **Workspace 头**:1.5rem 标题 + azure 竖条 accent;session id chip 改为 hover-only(降噪)
+- **ChatMessage**:user 气泡换成 azure 渐变 + 白字(iMessage 风),role label 不再 uppercase 让中文不丑
+- **ChatPanel/Composer**:都 align 到 `--content-max` 760px,垂直流式排版替代左右分裂感
+- **ChatPanel empty state**:4 张 click-to-send 引导卡(capabilities/RAG/tools/memory),解决"打开就空白不知道问什么"的冷启动问题
+- **TracePanel**:4 个指标 card 折叠成 inline status pill;明细行收进单一 toggle,默认收起(降低视觉负担,但保留可深挖)
+
+**关键设计决策**
+
+1. **Hash-derived session hue 而非随机** — `sessionId.hashCode()` % hue 空间。意义:用户在 sidebar 切回旧会话能靠颜色识别,而不是只看"会话 1/会话 2"数字。简历卖点:"deterministic visual identity from id — Linear / Slack 同款做法"。
+2. **iMessage 风 user 气泡而非 bot 同款** — 明确区分"我说的话 vs AI 回的话"。industry baseline 是 ChatGPT 同色框 + 不同对齐,我用 azure 渐变 + 白字更视觉化,加分点。
+3. **Empty state 不留白,直接给 4 个 click-to-send card** — 引导新用户测试系统能力(RAG / tools / memory 各一张)。这是 Anthropic Claude / Cursor / v0 同款 onboarding pattern。**在 demo / 面试演示时这一步直接证明了产品意识**。
+4. **Trace 默认折叠** — v1 是 4 个指标平铺 + 一堆 KV 行,信息过载。v2 折叠成 inline pill + toggle,默认隐藏明细。开发模式可一键展开排查,正常使用模式视觉干净。"progressive disclosure"是 Linear / Stripe Dashboard 标配。
+5. **`--content-max=760px` 双 column align** — chat 区和 composer 都受同一个 max-width 限制,大屏不会拉宽到 1400px 难以阅读(行长舒适区是 60-80 字)。这是 Substack / Medium 等阅读型产品的排版标准。
+
+**改动文件**
+
+```
+修改   frontend/src/App.css                           # tokens
+修改   frontend/src/App.tsx                           # 接入 tokens
+修改   frontend/src/components/chat/ChatMessage.css   # iMessage 气泡
+修改   frontend/src/components/chat/ChatPanel.css
+修改   frontend/src/components/chat/ChatPanel.tsx     # 引导卡
+修改   frontend/src/components/composer/Composer.css
+修改   frontend/src/components/layout/Sidebar.tsx     # hash hue + token label
+修改   frontend/src/components/layout/TracePanel.css
+修改   frontend/src/components/layout/TracePanel.tsx  # status pill + 折叠
+修改   frontend/src/components/layout/Workspace.css
+修改   frontend/src/components/layout/Workspace.tsx
+```
+
+测试:`tsc --noEmit` 干净;后端 116/116 全绿(无后端改动)。
+
+**简历卖点**: 项目从"工程师 demo"提到"产品级 UI"。可挂"design tokens / deterministic hue / progressive disclosure / onboarding cards 四个行业标配"作为前端工程审美的证据。Agent 实习 JD 通常要求"全栈意识",这一段就是底料。
+
+---
+
+## 阶段 2 — 差异化亮点
+
+✅ 已完成项(每条对应一个简历对标):
+- **ReAct / StateGraph 循环**(LangGraph 对标)— 见 SG 段落
+- **Anthropic Contextual Retrieval + RRF**(CR-2 真 BM25 推迟)— 见 CR-1 段落
+- **Self-RAG / CRAG 检索充分性评估** — 见 SR 段落
+- **Trace 升 span 树 + 前端 TraceTree**(LangSmith 对标)— 见 T1 / T2 段落
+- **HITL**(Anthropic computer use 对标)— 见 HL.a / HL.b 段落
+- **MCP 客户端**(Model Context Protocol)— 见 MCP 段落
+- **UI 设计 pass**(tokens / hash hue / 引导卡 / 折叠 trace)— 见 UI 段落
+
+⏸ 推迟/可选项:
+- **A-5 + C-3**:跑 v1 / v2 真 LLM baseline 对比,产出简历核心数字(下一步推这个)
+- **CR-2**:真 BM25 (Flyway + tsvector + jieba) 替换 ILIKE 2-gram,A-5 数字出来再决定 ROI
+- **MemGPT / Mem0 风格 memory**(LLM 抽取 + add/update/merge + reflection)— 阶段 3 候选,不进 v2
 
 ---
 

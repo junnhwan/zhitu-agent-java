@@ -34,28 +34,37 @@ import java.util.function.Consumer;
 public class LangChain4jLlmRuntime implements LlmRuntime {
 
     private static final Logger log = LoggerFactory.getLogger(LangChain4jLlmRuntime.class);
-    private static final Duration MODEL_TIMEOUT = Duration.ofSeconds(60);
-    private static final long STREAM_TIMEOUT_SECONDS = 90;
+    private static final Duration MODEL_TIMEOUT = Duration.ofSeconds(180);
+    private static final long STREAM_TIMEOUT_SECONDS = 240;
 
     private final LlmProperties properties;
     private final AiMetricsRecorder aiMetricsRecorder;
+    private final LlmRateLimiter rateLimiter;
     private volatile ChatModel chatModel;
     private volatile StreamingChatModel streamingChatModel;
 
     public LangChain4jLlmRuntime(LlmProperties properties) {
-        this(properties, AiMetricsRecorder.noop());
+        this(properties, AiMetricsRecorder.noop(), LlmRateLimiter.disabled());
+    }
+
+    public LangChain4jLlmRuntime(LlmProperties properties, AiMetricsRecorder aiMetricsRecorder) {
+        this(properties, aiMetricsRecorder, LlmRateLimiter.disabled());
     }
 
     @Autowired
-    public LangChain4jLlmRuntime(LlmProperties properties, AiMetricsRecorder aiMetricsRecorder) {
+    public LangChain4jLlmRuntime(LlmProperties properties,
+                                 AiMetricsRecorder aiMetricsRecorder,
+                                 LlmRateLimiter rateLimiter) {
         this.properties = properties;
         this.aiMetricsRecorder = aiMetricsRecorder;
+        this.rateLimiter = rateLimiter;
     }
 
     @Override
     public String generate(String systemPrompt, List<String> messages, Map<String, Object> metadata) {
         long startNanos = System.nanoTime();
         if (shouldUseRealProvider()) {
+            rateLimiter.acquire("generate");
             try {
                 ChatResponse response = getChatModel().chat(toChatMessages(systemPrompt, messages));
                 String answer = response.aiMessage() == null || response.aiMessage().text() == null
@@ -115,6 +124,7 @@ public class LangChain4jLlmRuntime implements LlmRuntime {
                                             Map<String, Object> metadata) {
         long startNanos = System.nanoTime();
         if (shouldUseRealProvider()) {
+            rateLimiter.acquire("generateWithTools");
             try {
                 ChatRequest.Builder builder = ChatRequest.builder()
                         .messages(toChatMessages(systemPrompt, messages));
@@ -162,6 +172,7 @@ public class LangChain4jLlmRuntime implements LlmRuntime {
                                            Map<String, Object> metadata) {
         long startNanos = System.nanoTime();
         if (shouldUseRealProvider()) {
+            rateLimiter.acquire("generateChatTurn");
             try {
                 List<ChatMessage> typedMessages = new ArrayList<>();
                 if (isNotBlank(systemPrompt)) {
@@ -231,6 +242,7 @@ public class LangChain4jLlmRuntime implements LlmRuntime {
                        Runnable onComplete) {
         long startNanos = System.nanoTime();
         if (shouldUseRealProvider()) {
+            rateLimiter.acquire("stream");
             CountDownLatch completionLatch = new CountDownLatch(1);
             AtomicReference<Throwable> errorRef = new AtomicReference<>();
             AtomicBoolean emittedPartialToken = new AtomicBoolean(false);
