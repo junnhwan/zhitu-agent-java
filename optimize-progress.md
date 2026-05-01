@@ -384,7 +384,7 @@ aggregate: `meanRecallAt5 = 0.833`, `meanNdcgAt5 = 0.871`, `rankingCheckedCases 
 
 **为什么没在单元测试里被抓**: `RrfFusionMerger` 自带的单测是 list-vs-list 验证,从来没经过 `RagRetriever.minScore` 这一关;v1 默认 fusion-strategy=linear 用的是 cosine 加权,score 仍在 [0,1] 量级,所以 minScore=0.15 一直 work。这是 CR-1 阶段的 silent bug,**只有跑 end-to-end eval 才会暴露**。这一段就是简历"评测体系真的能抓住单测漏过的回归"的实证。
 
-**修复路线(A-6 子任务)**: 把 minScore 改为 mode-aware(linear/dense 用 0.15,rrf 用 0.001),或给 RRF score 加 normalization 投到 [0,1]。改 ~5 行,A-7 重跑 v2 拿"v2 反超 v1"的最终数字。
+**修复路线(A-6 子任务)**: 把 minScore 改为 mode-aware(linear/dense 用 0.15,rrf 不再套阈值),改 ~5 行,A-7 重跑闭环。**实际 A-7 结果(写于本段当时是预期为"v2 反超 v1",真实结果见下文 A-7 段落)**:fixture 已到 ceiling,v1=v2 双 100%,但 v2 p90 latency -25%。
 
 **v1 / v2 配置差异**
 
@@ -921,7 +921,7 @@ zhitu:
 
 ## 阶段 2 — 差异化亮点
 
-✅ 已完成项(每条对应一个简历对标):
+✅ 全部完成(每条对应一个简历对标):
 - **ReAct / StateGraph 循环**(LangGraph 对标)— 见 SG 段落
 - **Anthropic Contextual Retrieval + RRF**(CR-2 真 BM25 推迟)— 见 CR-1 段落
 - **Self-RAG / CRAG 检索充分性评估** — 见 SR 段落
@@ -929,24 +929,29 @@ zhitu:
 - **HITL**(Anthropic computer use 对标)— 见 HL.a / HL.b 段落
 - **MCP 客户端**(Model Context Protocol)— 见 MCP 段落
 - **UI 设计 pass**(tokens / hash hue / 引导卡 / 折叠 trace)— 见 UI 段落
+- **A-5 真 LLM baseline + Reporter** + **A-6 fusion 阈值修复** + **A-7 闭环验证**(三幕剧)— 见 A-5 / A-6 / A-7 段落
 
-⏸ 推迟/可选项:
-- **A-5 + C-3**:跑 v1 / v2 真 LLM baseline 对比,产出简历核心数字(下一步推这个)
-- **CR-2**:真 BM25 (Flyway + tsvector + jieba) 替换 ILIKE 2-gram,A-5 数字出来再决定 ROI
-- **MemGPT / Mem0 风格 memory**(LLM 抽取 + add/update/merge + reflection)— 阶段 3 候选,不进 v2
+⏸ 阶段 3 候选(score 已 ceiling,以下方向解锁更大空间):
+- **fixture 升级**:graded relevance(LLM-as-judge)/ adversarial cases / 大规模(>50 case)
+- **MemGPT / Mem0 风格 memory**:LLM 抽取 + add/update/merge + reflection
+- **CR-2 真 BM25**(Flyway + tsvector + jieba):A-7 已发现 score 不是当前瓶颈,优先级降低
+- **faithfulness eval**:Ragas 风格 LLM-as-judge 验证答案是否真实基于 evidence
 
 ---
 
-## 简历叙事框架
+## 简历叙事框架(最终版,2026-05-01)
 
 每个改造点都对应一个**对标 + 数字**的短故事:
 
-| 层 | v1 现状 | v2 改造 | 业界对标 | 量化指标 |
+| 层 | v1 现状 | v2 改造 | 业界对标 | 对应 commit / 量化指标 |
 |---|---|---|---|---|
-| 评测 | topSource 字符串相等 | Recall/MRR/nDCG/keyword | BEIR/MTEB/Ragas | 30 条 holdout |
-| Tool | 关键词 if-else | 真 function calling | OpenAI / Anthropic | tool 选择准确率 |
-| 编排 | 单趟流水线 | ReAct StateGraph | LangGraph | 多步任务通过率 |
-| RAG | dense + ILIKE + 手写 calibrator | Contextual + RRF + Self-RAG | Anthropic / Self-RAG | nDCG@5 提升 |
-| Memory | 正则 facts 不持久化 | LLM 抽取 + add/update/merge | MemGPT / Mem0 | facts 准确率 |
-| Tool 治理 | 零治理 | MCP + HITL + Resilience4j | Anthropic computer use | tool 失败率 |
-| Trace | 扁平 KV | span 树 + replay | LangSmith / Phoenix | 时间轴可视化 |
+| 评测 | topSource 字符串相等 | Recall/MRR/nDCG/keyword + train/eval split | BEIR/MTEB/Ragas | C-1 / C-2,16 case 4 holdout |
+| Tool | 关键词 if-else | function calling + 并行 + 失败回退 + schema 校验 + loop 检测 | OpenAI / Anthropic | A-1..A-4 |
+| 编排 | 单趟流水线 | ReAct AgentLoop 4 轮 + 嵌套 span | LangGraph | SG |
+| RAG | dense + ILIKE + 手写 calibrator | sha256 chunkId + Anthropic CR prefix + RRF + Self-RAG critique | Anthropic Contextual Retrieval / Self-RAG / CRAG | CR-1 / SR |
+| Trace | 扁平 KV | flat-on-wire / tree-in-view 时间轴 + status 颜色 + lazy attributes | LangSmith / Phoenix | T1 / T2 |
+| Tool 治理 | 零治理 | requireApproval + PendingToolCallStore single-use token + HitlController + 前端 modal + auto resume | Anthropic computer use / LangGraph interrupt+resume | HL.a / HL.b |
+| 协议接入 | 只有内置工具 | MCP McpClient interface + adapter pattern + late-binding registrar | Model Context Protocol | MCP |
+| 前端 | 扁平默认 | tokens + hash-derived hue + iMessage 气泡 + 引导卡 + Trace 折叠 | Linear / Stripe / ChatGPT | UI(11 文件 +573/-250) |
+| **eval 闭环** | **代码已落地缺数字** | **真 LLM baseline + 评测拍出 fusion silent bug + 一行修复 + 重跑闭环** | **BEIR holdout split / 工程师 root cause debug** | **A-5 / A-6 / A-7,v2 p90 latency -25%** |
+
