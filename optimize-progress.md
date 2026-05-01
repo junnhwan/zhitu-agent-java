@@ -429,6 +429,58 @@ aggregate: `meanRecallAt5 = 0.833`, `meanNdcgAt5 = 0.871`, `rankingCheckedCases 
 
 ---
 
+### A-7 ✅ 修复后重跑 v1+v2 闭环验证(2026-05-01 完成)
+
+**做了什么**
+
+A-6 修了 RagRetriever 之后,重新跑 v1 + v2 baseline + 对比报告,验证 fix 把 v2 从"4 个 rag-simple case nDCG=0"拉回正常,同时不破坏 v1 的既有能力。
+
+**v1 vs v2 修复后真数字**(同一套 fixture / 同一套环境,只换了 commit `4b8d51d` 的 RagRetriever)
+
+| 指标 | v1 | v2 (修复后) | Δ |
+|---|---|---|---|
+| 通过率 | 16/16 (100%) | 16/16 (100%) | +0.000 ✅ |
+| routeAccuracy | 1.000 | 1.000 | +0.000 |
+| meanRecallAt5 | 1.000 | 1.000 | +0.000 |
+| meanMrrAt5 | 1.000 | 1.000 | +0.000 |
+| meanNdcgAt5 | 1.000 | 1.000 | +0.000 |
+| meanAnswerKeywordCoverage | 1.000 | 1.000 | +0.000 |
+| avgLatencyMs | 25536 | 25441 | -94 |
+| **p90LatencyMs** | **52149** | **39161** | **-12988 (-25%)** ✅ |
+
+| split | v1 通过 | v2 通过 | v1 nDCG | v2 nDCG |
+|---|---|---|---|---|
+| train (n=12) | 12/12 | 12/12 | 1.000 | 1.000 |
+| **eval holdout (n=4)** | **4/4** | **4/4** | **1.000** | **1.000** |
+
+**三幕剧完整闭环**
+
+| 阶段 | 数字 | 故事 |
+|---|---|---|
+| A-5 第一次跑 | v1=1.000 / v2=0.500 (4 个 rag-simple 退化) | 评测体系拍出 silent bug |
+| A-6 修复 | RagRetriever 一行 if mode-aware | RRF score 不再被 cosine 阈值误拒 |
+| A-7 重跑 | v1=1.000 / v2=1.000 | 修复闭环,且 v2 p90 latency -25% |
+
+**关键发现**
+
+1. **score 已到 ceiling**: 16 case fixture 在 hybrid-rerank mode 上,v1 已经 nDCG=1.0。这意味着**当前 fixture 没有难度上的"提升空间"**,v2 改造只能体现在 latency / 错误恢复 / 可观测性这些 score 之外的维度。简历叙事:"我意识到 fixture 是 ceiling 不是 floor,next 阶段需要 graded relevance + adversarial cases"。
+2. **v2 p90 latency -25% 是真实提升**: self-rag 的 sufficiency critique 让 v2 在简单 case 上 iter=1 就 stop(`reason=no_rewrite`),避开不必要的 rewrite + 二次检索;ReAct 也避免了 v1 那种"必须先决策路由再生成"的固定 2-call 流水线,某些 case 直接一轮搞定。
+3. **fix 后 v2 没倒退**: A-6 mode-aware 修改没破坏 dense / dense-rerank / hybrid-rerank 三种 mode 的既有阈值过滤行为(它们仍然走 minScore=0.15)。回归测试 122/122 全绿 + e2e baseline 12/12 train + 4/4 holdout 100% 双重保证。
+
+**简历叙事框架更新**
+
+| 阶段 | 故事一句话 | 商业价值 |
+|---|---|---|
+| 现状评估(C-2) | 我搭了 16 case + holdout 评测 | 让接下来的所有改造都有 reproducible 数字 |
+| 改造落地(SG/CR/SR/HL/MCP) | 7 个对标论文/产品的 v2 改造 | 不是堆 demo,是按业界最佳实践重写架构 |
+| 评测发现 bug(A-5) | 实测 v2 反而 -50% nDCG | 评测真的能抓住单测漏过的 silent bug |
+| 诊断 + 修复(A-6) | 一行 if mode-aware 解决 RRF/cosine 量级失配 | 工程师拿到诊断日志就能定位 root cause |
+| 闭环验证(A-7) | v1=v2 score 持平,v2 p90 latency -25% | 修复有效;同时识别 fixture 已 ceiling,next 加难度 |
+
+阶段 2 全部 ✅ 完成。next 阶段候选:graded relevance / adversarial fixture / MemGPT-style memory(写进阶段 3 候选清单)。
+
+---
+
 ### T1 ✅ Span 树 + SseEventType 枚举(后端)(2026-04-30 完成)
 
 
