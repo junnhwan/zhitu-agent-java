@@ -10,6 +10,7 @@ zhitu:
   infrastructure:
     redis-enabled: ${ZHITU_REDIS_ENABLED:false}
     elasticsearch-enabled: ${ZHITU_ES_ENABLED:false}
+    minio-enabled: ${ZHITU_MINIO_ENABLED:false}
   llm:
     mock-mode: ${ZHITU_LLM_MOCK_MODE:false}
     base-url: ${ZHITU_CHAT_BASE_URL:}
@@ -32,3 +33,15 @@ zhitu:
     password: ${ZHITU_ES_PASSWORD:}
     index-name: ${ZHITU_ES_INDEX_NAME:zhitu_agent_knowledge}
     vector-dim: ${ZHITU_ES_VECTOR_DIM:4096}
+  minio:
+    endpoint: ${ZHITU_MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${ZHITU_MINIO_ACCESS_KEY:}
+    secret-key: ${ZHITU_MINIO_SECRET_KEY:}
+    bucket: ${ZHITU_MINIO_BUCKET:zhitu-agent-files}
+    presigned-url-expiry-seconds: ${ZHITU_MINIO_PRESIGNED_URL_EXPIRY:3600}
+  file:
+    upload-chunk-size: ${ZHITU_FILE_UPLOAD_CHUNK_SIZE:5242880}
+    parent-chunk-size: ${ZHITU_FILE_PARENT_CHUNK_SIZE:1048576}
+    child-chunk-size: ${ZHITU_FILE_CHILD_CHUNK_SIZE:512}
+    chunk-overlap: ${ZHITU_FILE_CHUNK_OVERLAP:64}
+    memory-threshold: ${ZHITU_FILE_MEMORY_THRESHOLD:0.8}

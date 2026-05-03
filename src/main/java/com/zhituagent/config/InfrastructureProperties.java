@@ -7,6 +7,7 @@ public class InfrastructureProperties {
 
     private boolean redisEnabled = false;
     private boolean elasticsearchEnabled = false;
+    private boolean minioEnabled = false;
 
     public boolean isRedisEnabled() {
         return redisEnabled;
@@ -22,5 +23,13 @@ public class InfrastructureProperties {
 
     public void setElasticsearchEnabled(boolean elasticsearchEnabled) {
         this.elasticsearchEnabled = elasticsearchEnabled;
+    }
+
+    public boolean isMinioEnabled() {
+        return minioEnabled;
+    }
+
+    public void setMinioEnabled(boolean minioEnabled) {
+        this.minioEnabled = minioEnabled;
     }
 }

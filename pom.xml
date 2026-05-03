@@ -23,6 +23,9 @@
         <elasticsearch.version>8.10.4</elasticsearch.version>
         <testcontainers.version>1.21.4</testcontainers.version>
         <resilience4j.version>2.2.0</resilience4j.version>
+        <minio.version>8.5.12</minio.version>
+        <tika.version>2.9.1</tika.version>
+        <hanlp.version>portable-1.8.6</hanlp.version>
     </properties>
 
     <dependencyManagement>
@@ -103,6 +106,31 @@
             <groupId>io.github.resilience4j</groupId>
             <artifactId>resilience4j-micrometer</artifactId>
             <version>${resilience4j.version}</version>
+        </dependency>
+
+        <!-- File ingestion pipeline (M2: MinIO + Tika + HanLP) -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>${minio.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+            <version>${tika.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-parsers-standard-package</artifactId>
+            <version>${tika.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.hankcs</groupId>
+            <artifactId>hanlp</artifactId>
+            <version>${hanlp.version}</version>
         </dependency>
 
         <dependency>
