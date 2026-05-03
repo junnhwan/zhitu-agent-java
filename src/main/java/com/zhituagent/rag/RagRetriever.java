@@ -105,28 +105,53 @@ public class RagRetriever {
                 ? Math.max(finalLimit, Math.max(1, rerankProperties.getRecallTopK()))
                 : finalLimit;
 
-        List<KnowledgeSnippet> denseSnippets = filterByAllowedSources(
-                knowledgeIngestService.search(processedQuery, recallLimit),
-                safeOptions
-        );
-        List<KnowledgeSnippet> lexicalSnippets = hybridEnabled
-                ? filterByAllowedSources(
-                lexicalRetriever.retrieve(processedQuery, Math.max(1, ragProperties.getLexicalTopK())),
-                safeOptions
-        )
-                : List.of();
-        List<RetrievalCandidate> candidates = hybridEnabled
-                ? hybridRetrievalMerger.merge(denseSnippets, lexicalSnippets, recallLimit)
-                : denseSnippets.stream()
-                .map(snippet -> new RetrievalCandidate(
-                        snippet.source(),
-                        snippet.chunkId(),
-                        snippet.score(),
-                        snippet.content(),
-                        snippet.denseScore(),
-                        0.0
-                ))
-                .toList();
+        boolean nativeHybrid = hybridEnabled && knowledgeIngestService.supportsNativeHybrid();
+        List<RetrievalCandidate> candidates;
+        if (nativeHybrid) {
+            // ES native hybrid: KNN + match + rescore in a single round-trip.
+            // HybridRetrievalMerger / RrfFusionMerger are passthrough on this path.
+            List<KnowledgeSnippet> hybridSnippets = filterByAllowedSources(
+                    knowledgeIngestService.hybridSearch(processedQuery, recallLimit),
+                    safeOptions
+            );
+            candidates = hybridSnippets.stream()
+                    .map(snippet -> new RetrievalCandidate(
+                            snippet.source(),
+                            snippet.chunkId(),
+                            snippet.score(),
+                            snippet.content(),
+                            0.0,
+                            0.0
+                    ))
+                    .toList();
+        } else if (hybridEnabled) {
+            // Legacy hybrid (in-memory / pgvector): dense + lexical + RRF/linear merge.
+            List<KnowledgeSnippet> denseSnippets = filterByAllowedSources(
+                    knowledgeIngestService.search(processedQuery, recallLimit),
+                    safeOptions
+            );
+            List<KnowledgeSnippet> lexicalSnippets = filterByAllowedSources(
+                    lexicalRetriever.retrieve(processedQuery, Math.max(1, ragProperties.getLexicalTopK())),
+                    safeOptions
+            );
+            candidates = hybridRetrievalMerger.merge(denseSnippets, lexicalSnippets, recallLimit);
+        } else {
+            // Dense-only.
+            List<KnowledgeSnippet> denseSnippets = filterByAllowedSources(
+                    knowledgeIngestService.search(processedQuery, recallLimit),
+                    safeOptions
+            );
+            candidates = denseSnippets.stream()
+                    .map(snippet -> new RetrievalCandidate(
+                            snippet.source(),
+                            snippet.chunkId(),
+                            snippet.score(),
+                            snippet.content(),
+                            snippet.denseScore(),
+                            0.0
+                    ))
+                    .toList();
+        }
 
         RagRetrievalResult result = tryRerank(processedQuery, finalLimit, candidates, hybridEnabled, rerankEnabled);
         if (shouldRejectLowConfidence(result)) {

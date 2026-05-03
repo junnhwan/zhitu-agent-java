@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class InfrastructureProperties {
 
     private boolean redisEnabled = false;
-    private boolean pgvectorEnabled = false;
+    private boolean elasticsearchEnabled = false;
 
     public boolean isRedisEnabled() {
         return redisEnabled;
@@ -16,11 +16,11 @@ public class InfrastructureProperties {
         this.redisEnabled = redisEnabled;
     }
 
-    public boolean isPgvectorEnabled() {
-        return pgvectorEnabled;
+    public boolean isElasticsearchEnabled() {
+        return elasticsearchEnabled;
     }
 
-    public void setPgvectorEnabled(boolean pgvectorEnabled) {
-        this.pgvectorEnabled = pgvectorEnabled;
+    public void setElasticsearchEnabled(boolean elasticsearchEnabled) {
+        this.elasticsearchEnabled = elasticsearchEnabled;
     }
 }

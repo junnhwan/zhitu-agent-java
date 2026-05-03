@@ -18,7 +18,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
         EmbeddingProperties.class,
         RagProperties.class,
         RerankProperties.class,
-        PgVectorProperties.class,
+        EsProperties.class,
         InfrastructureProperties.class,
         EvalProperties.class,
         TraceArchiveProperties.class,

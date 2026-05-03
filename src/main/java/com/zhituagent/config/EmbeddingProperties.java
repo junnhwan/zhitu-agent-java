@@ -8,6 +8,14 @@ public class EmbeddingProperties {
     private String baseUrl = "";
     private String apiKey = "";
     private String modelName = "";
+    /**
+     * Optional Matryoshka-style dimension override for the OpenAI-compatible
+     * {@code dimensions} parameter. When > 0 it forces the embedding model to
+     * return vectors of this size (Qwen3-Embedding supports MRL truncation to
+     * 1024/2048/4096). Set to {@code 2048} for ES 8.10 since its
+     * {@code dense_vector} ceiling is 2048 (raised to 4096 in 8.13+).
+     */
+    private int dimensions = 0;
 
     public String getBaseUrl() {
         return baseUrl;
@@ -31,5 +39,13 @@ public class EmbeddingProperties {
 
     public void setModelName(String modelName) {
         this.modelName = modelName;
+    }
+
+    public int getDimensions() {
+        return dimensions;
+    }
+
+    public void setDimensions(int dimensions) {
+        this.dimensions = dimensions;
     }
 }

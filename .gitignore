@@ -14,3 +14,5 @@ frontend/node_modules/
 # Local-only: Claude Code session transcripts and personal resume drafts
 archive/sessions/
 docs/resume/
+# Loose session logs dropped at repo root (date-prefixed .txt)
+20*-*.txt

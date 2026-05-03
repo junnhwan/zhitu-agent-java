@@ -1,0 +1,28 @@
+{
+  "mappings": {
+    "properties": {
+      "chunkId": {
+        "type": "keyword"
+      },
+      "source": {
+        "type": "keyword"
+      },
+      "content": {
+        "type": "text",
+        "analyzer": "ik_max_word",
+        "search_analyzer": "ik_smart"
+      },
+      "embedText": {
+        "type": "text",
+        "analyzer": "ik_max_word",
+        "search_analyzer": "ik_smart"
+      },
+      "embedding": {
+        "type": "dense_vector",
+        "dims": __VECTOR_DIM__,
+        "index": true,
+        "similarity": "cosine"
+      }
+    }
+  }
+}

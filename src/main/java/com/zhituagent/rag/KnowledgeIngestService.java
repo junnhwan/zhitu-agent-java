@@ -54,6 +54,14 @@ public class KnowledgeIngestService {
         return knowledgeStore.lexicalSearch(query, limit);
     }
 
+    public List<KnowledgeSnippet> hybridSearch(String query, int limit) {
+        return knowledgeStore.hybridSearch(query, limit);
+    }
+
+    public boolean supportsNativeHybrid() {
+        return knowledgeStore.supportsNativeHybrid();
+    }
+
     private String annotateForEmbedding(String document, String chunk) {
         if (contextualAnnotator == null || !contextualAnnotator.isEnabled()) {
             return null;

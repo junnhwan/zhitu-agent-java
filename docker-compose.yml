@@ -5,17 +5,32 @@ services:
     ports:
       - "6379:6379"
 
-  postgres:
-    image: pgvector/pgvector:pg16
-    container_name: zhitu-agent-postgres
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.4
+    container_name: zhitu-agent-elasticsearch
     environment:
-      POSTGRES_DB: zhitu_agent
-      POSTGRES_USER: zhitu
-      POSTGRES_PASSWORD: zhitu
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
     ports:
-      - "5432:5432"
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+      - es-plugins:/usr/share/elasticsearch/plugins
+    command: >
+      bash -c "
+      if [ ! -d /usr/share/elasticsearch/plugins/analysis-ik ]; then
+        echo 'Installing IK analyzer plugin...';
+        elasticsearch-plugin install --batch https://release.infinilabs.com/analysis-ik/stable/elasticsearch-analysis-ik-8.10.4.zip;
+      fi;
+      exec /usr/local/bin/docker-entrypoint.sh elasticsearch"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U zhitu -d zhitu_agent"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 60s
+
+volumes:
+  es-data:
+  es-plugins:

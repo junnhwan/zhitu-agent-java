@@ -13,8 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(
         classes = ZhituAgentApplication.class,
         properties = {
-                "zhitu.infrastructure.redis-enabled=false",
-                "zhitu.infrastructure.pgvector-enabled=false"
+                "zhitu.infrastructure.redis-enabled=false"
         }
 )
 class InfrastructureWiringTest {

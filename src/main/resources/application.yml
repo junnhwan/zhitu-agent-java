@@ -26,6 +26,7 @@ zhitu:
     base-url: ${ZHITU_EMBEDDING_URL:}
     api-key: ${ZHITU_EMBEDDING_API_KEY:}
     model-name: ${ZHITU_EMBEDDING_MODEL_NAME:}
+    dimensions: ${ZHITU_EMBEDDING_DIMENSIONS:0}
   rerank:
     enabled: ${ZHITU_RERANK_ENABLED:true}
     url: ${ZHITU_RERANK_URL:}
@@ -38,18 +39,17 @@ zhitu:
     hybrid-enabled: ${ZHITU_RAG_HYBRID_ENABLED:true}
     lexical-top-k: ${ZHITU_RAG_LEXICAL_TOP_K:10}
     min-accepted-score: ${ZHITU_RAG_MIN_ACCEPTED_SCORE:0.15}
-  pgvector:
-    host: ${ZHITU_PGVECTOR_HOST:localhost}
-    port: ${ZHITU_PGVECTOR_PORT:5432}
-    database: ${ZHITU_PGVECTOR_DATABASE:}
-    username: ${ZHITU_PGVECTOR_USERNAME:}
-    password: ${ZHITU_PGVECTOR_PASSWORD:}
-    schema: ${ZHITU_PGVECTOR_SCHEMA:public}
-    table: ${ZHITU_PGVECTOR_TABLE:zhitu_agent_knowledge}
-    min-score: ${ZHITU_PGVECTOR_MIN_SCORE:0.0}
+  elasticsearch:
+    host: ${ZHITU_ES_HOST:localhost}
+    port: ${ZHITU_ES_PORT:9200}
+    scheme: ${ZHITU_ES_SCHEME:http}
+    username: ${ZHITU_ES_USERNAME:}
+    password: ${ZHITU_ES_PASSWORD:}
+    index-name: ${ZHITU_ES_INDEX_NAME:zhitu_agent_knowledge}
+    vector-dim: ${ZHITU_ES_VECTOR_DIM:4096}
   infrastructure:
     redis-enabled: ${ZHITU_REDIS_ENABLED:false}
-    pgvector-enabled: ${ZHITU_PGVECTOR_ENABLED:false}
+    elasticsearch-enabled: ${ZHITU_ES_ENABLED:false}
   trace-archive:
     enabled: ${ZHITU_TRACE_ARCHIVE_ENABLED:true}
     dir: ${ZHITU_TRACE_ARCHIVE_DIR:logs/trace}
@@ -74,6 +74,8 @@ management:
   health:
     redis:
       enabled: ${ZHITU_REDIS_ENABLED:false}
+    elasticsearch:
+      enabled: ${ZHITU_ES_ENABLED:false}
   prometheus:
     metrics:
       export:

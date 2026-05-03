@@ -1,3 +1,13 @@
 zhitu:
   llm:
     mock-mode: true
+
+management:
+  health:
+    elasticsearch:
+      enabled: false
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchClientAutoConfiguration

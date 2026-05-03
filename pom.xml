@@ -20,7 +20,7 @@
     <properties>
         <java.version>21</java.version>
         <langchain4j.version>1.1.0</langchain4j.version>
-        <langchain4j.pgvector.version>1.1.0-beta7</langchain4j.pgvector.version>
+        <elasticsearch.version>8.10.4</elasticsearch.version>
         <testcontainers.version>1.21.4</testcontainers.version>
         <resilience4j.version>2.2.0</resilience4j.version>
     </properties>
@@ -80,15 +80,17 @@
             <version>${langchain4j.version}</version>
         </dependency>
 
+        <!-- Elasticsearch Java client (v3 hybrid retrieval stack) -->
         <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-pgvector</artifactId>
-            <version>${langchain4j.pgvector.version}</version>
+            <groupId>co.elastic.clients</groupId>
+            <artifactId>elasticsearch-java</artifactId>
+            <version>${elasticsearch.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
+            <groupId>jakarta.json</groupId>
+            <artifactId>jakarta.json-api</artifactId>
+            <version>2.1.3</version>
         </dependency>
 
         <dependency>
@@ -124,6 +126,12 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>elasticsearch</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
