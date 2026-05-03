@@ -1,0 +1,9 @@
+智图 Agent v3 文件入库 smoke 测试 (2026-05-03)
+
+本文档用于验证 M2 milestone 端到端流程:
+multipart 上传 → MinIO putObject → Tika 解析 (中英混合) →
+KnowledgeIngestService.ingest → ElasticsearchKnowledgeStore.bulkIndex。
+
+如果 RAG 检索后续能拉回这段文本,说明 v3 file ingestion pipeline 全链路通。
+
+唯一关键词:Phoenix-v3-smoke-token-2026

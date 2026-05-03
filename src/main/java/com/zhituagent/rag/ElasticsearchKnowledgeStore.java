@@ -98,7 +98,7 @@ public class ElasticsearchKnowledgeStore implements KnowledgeStore {
         }
 
         try {
-            BulkResponse resp = esClient.bulk(BulkRequest.of(b -> b
+            BulkResponse resp = bulkWithRetry(BulkRequest.of(b -> b
                     .operations(ops)
                     .refresh(Refresh.WaitFor)));
             if (resp.errors()) {
@@ -111,6 +111,22 @@ public class ElasticsearchKnowledgeStore implements KnowledgeStore {
             }
         } catch (IOException e) {
             throw new IllegalStateException("ES bulk index IO error", e);
+        }
+    }
+
+    /**
+     * Bulk with one retry on {@link IOException}. The Java ES client's
+     * connection pool can hand out a socket that the server has already
+     * RST'd after a long idle period — the first write fails fast, but a
+     * retry obtains a fresh socket from the pool and usually succeeds.
+     * Smoke-tested in M2.7: 6-min idle → first write reset → retry OK.
+     */
+    private BulkResponse bulkWithRetry(BulkRequest req) throws IOException {
+        try {
+            return esClient.bulk(req);
+        } catch (IOException ioe) {
+            LOG.warn("ES bulk failed (likely stale connection), retrying once: {}", ioe.getMessage());
+            return esClient.bulk(req);
         }
     }
 
