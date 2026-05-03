@@ -13,8 +13,9 @@
 
 - 单模块,不提前拆多模块
 - 会话记忆:Redis
-- RAG:PostgreSQL + pgvector
-- 阶段 2 已完成(混合检索、可观测性、评估体系、ReAct、Contextual Retrieval、Self-RAG、HITL、MCP);阶段 3 候选见 `CLAUDE.md`
+- RAG:Elasticsearch 8.10 + IK 中文分词器(M1 已退役 pgvector)— dense+sparse 都进 ES,hybrid 单次 KNN+match+rescore
+- 文件入库:MinIO + Tika + HanLP(M2 同步)→ Kafka KRaft 异步 pipeline(M3 完成,producer 事务 + consumer at-least-once + DLT)
+- 阶段 2 已完成(混合检索、可观测性、评估体系、ReAct、Contextual Retrieval、Self-RAG、HITL、MCP);阶段 3 v3 ES 栈现代化 M1+M2+M3 已完成,M4(测试治理 + 文档刷新)进行中
 
 ## 交付约束
 
@@ -65,7 +66,8 @@
   - `2026-04-28-zhitu-agent-java-phase-two-plan.md`
   - `2026-04-28-zhitu-agent-java-optimization-plan.md`
 - **当前状态**(详见 `optimize-progress.md`):
-  - 阶段 1 / 阶段 2 全部完成,真实 LLM 链路 + Redis + pgvector 全部联调通过
-  - 19 commit,A-5/A-6/A-7 三幕剧闭环(评测发现 fusion bug → 一行修复 → 重跑 v2 p90 latency -25%)
-  - 单元测试 122/122 全绿,真 LLM baseline 16/16 case 双 split 满分
-  - fixture 已到 ceiling,阶段 3 候选 = graded relevance / MemGPT memory / faithfulness eval
+  - 阶段 1 / 阶段 2 全部完成,真实 LLM 链路 + Redis + ES 全部联调通过
+  - 阶段 3 v3 ES 栈现代化 M1+M2+M3 完成:pgvector→ES+IK、MinIO+Tika 同步入库、Kafka KRaft 异步 pipeline
+  - 单元测试 217/217 全绿(`mvn test`),IT 通过 `mvn verify` + Docker 跑(目前本地无 docker 自动跳过 4 个 Kafka IT)
+  - 真 LLM v1/v2 baseline 双 split 满分;v3 baseline 在云端 ES 上跑通 smoke
+  - 详细进度看 user-level memory `project_v3_es_stack.md`

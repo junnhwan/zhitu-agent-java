@@ -4,16 +4,17 @@
 
 ## TL;DR
 
-zhitu-agent-java = 用户 Agent 实习的核心作品集项目。**阶段 2 ✅ 完成**(19 commit)+ **阶段 3 v3 ES 栈 M1+M2 ✅ 完成**(5 commit / 200 单测 / 真实云端 smoke 通过)。
+zhitu-agent-java = 用户 Agent 实习的核心作品集项目。**阶段 2 ✅ 完成**(19 commit)+ **阶段 3 v3 ES 栈 M1+M2+M3 ✅ 完成**(6 commit / 217 单测 + 4 Kafka IT / 真实云端 smoke 通过)。
 
-栈:Java 21 + Spring Boot 3.5 + LangChain4j 1.1 + **Elasticsearch 8.10 + IK** + Redis + **MinIO + Tika + HanLP** + React/TS。云中间件部署在 106.12.190.62 docker(`infra/cloud/`)。
+栈:Java 21 + Spring Boot 3.5 + LangChain4j 1.1 + **Elasticsearch 8.10 + IK** + Redis + **MinIO + Tika + HanLP** + **Kafka 3.7 KRaft** + React/TS。云中间件部署在 106.12.190.62 docker(`infra/cloud/`,Kafka 已在跑)。
 
 **当前可讲故事**:
 - 阶段 2: 评测体系拍出 fusion silent bug → 一行修复 → 重跑 v2 p90 latency -25%
 - 阶段 3 M1+M2: pgvector 退役 → ES native hybrid(KNN+IK BM25+rescore 单次调用)+ MinIO+Tika+Redis bitmap 同步入库管线
-- **🔥 本会话叙事更正**: 通过重跑 v2 (ES off InMemory) vs v3 (ES on) 发现 routeAcc +0.20 提升 **不是 ES 功劳是 multi-agent SRE Phase 1 commit**(4 个 SRE case 全 False→全 True)。ES 价值在工程深度(IK/KNN/真 hybrid),不在数字。fixture 升级后才能拍出 ES 真价值。
+- 阶段 3 M3: Kafka KRaft 异步管线 — 上传立即 202,consumer 跑 Tika+embed+ES bulk;producer 事务 + idempotent + DLT 重试;at-least-once + ES `_id=chunkId` = exactly-once-effect
+- **🔥 叙事更正**: routeAcc +0.20 提升 **不是 ES 功劳是 multi-agent SRE Phase 1 commit**(4 个 SRE case 全 False→全 True)。ES + Kafka 价值在工程深度(IK/KNN/真 hybrid/事务异步管线),不在数字。
 
-下一步: M3 Kafka KRaft 异步管线(plan 在 `~/.claude/plans/generic-riding-wind.md`)。
+下一步: M4(failsafe IT 拆分 ✅ 完成 / docs 刷新中)→ M5 sync vs async perf 微基准 + resume 叙事段落。
 
 ## 协作模式(重要)
 
@@ -43,8 +44,9 @@ zhitu-agent-java = 用户 Agent 实习的核心作品集项目。**阶段 2 ✅ 
 ## 常用命令
 
 ```bash
-# 后端测试 — M2 完成时基准 200/200,任何改动后必须保持全绿
+# 后端单测 — M3 完成时基准 217/217,IT 走 mvn verify(需要 Docker)
 mvn -o test
+mvn -o verify          # 跑单测 + IT(@Tag("integration"));无 Docker 时 IT 自动 skip
 
 # 前端 tsc — 阶段 2 完成时干净,无错误
 cd frontend && npm run build
@@ -54,10 +56,19 @@ mvn -o spring-boot:run -Dspring-boot.run.profiles=local
 # 启动日志会打 "ZhituAgent active stores: KnowledgeStore=ElasticsearchKnowledgeStore (nativeHybrid=true), ..."
 # 如果看到 InMemoryKnowledgeStore,说明 .env 没生效或 ES 没开
 
-# 文件上传 smoke (M2 后)
+# 启 Kafka 异步管线(M3,需要 docker compose 起 kafka 或连 cloud)
+ZHITU_KAFKA_ENABLED=true ZHITU_KAFKA_BOOTSTRAP_SERVERS=106.12.190.62:9092 \
+  mvn -o spring-boot:run -Dspring-boot.run.profiles=local
+
+# 文件上传 smoke (M2 同步)
 curl -F file=@docs/m2-smoke-sample.txt http://localhost:8080/api/files/upload
 # 验证 ES 收到:
 curl "http://106.12.190.62:9200/zhitu_agent_knowledge/_search?q=source:m2-smoke-sample.txt&pretty"
+
+# 文件上传 smoke (M3 异步,期望 HTTP 202 + uploadId)
+curl -i -F file=@docs/m2-smoke-sample.txt http://localhost:8080/api/files/upload
+# 查询解析状态:
+curl "http://localhost:8080/api/files/status/{uploadId}"   # parseStatus: QUEUED→PARSING→INDEXED
 
 # 跑真 LLM baseline(切隔离 index 避免污染 prod)
 mvn -o spring-boot:run -Dspring-boot.run.profiles=local \
@@ -82,22 +93,27 @@ mvn -o spring-boot:run -Dspring-boot.run.profiles=local \
 - **真 LLM eval 必须切隔离 index**:`--zhitu.elasticsearch.index-name=zhitu_agent_eval`,别污染 prod KB(`zhitu_agent_knowledge`)
 - **ES idle 6 分钟后会被 server RST**:`ElasticsearchKnowledgeStore.bulkWithRetry` 已加 1 次 retry on IOException
 - **MinIO 默认 off**:本地测试不需要;真要跑 file pipeline 必须 `.env` 设 `ZHITU_MINIO_ENABLED=true`(已配)+ `ZHITU_MINIO_ACCESS_KEY/SECRET_KEY`
+- **Kafka 默认 off**:M3 异步管线只在 `ZHITU_KAFKA_ENABLED=true` 时激活;关掉 → controller 走 M2 同步路径(等价 200 + chunkCount)
+- **Kafka producer 用事务**:`KafkaTemplate.executeInTransaction` + `acks=all` + `enable.idempotence=true`;`transactional.id` 前缀 Spring 自动追加 epoch,跨进程多实例不冲突
+- **Kafka consumer 不开事务**:side-effect 是 ES 写,不是 Kafka 写。靠 `_id=chunkId` 幂等吃掉 at-least-once 重投递,DLT 收 poison pill
 - **`@ConditionalOnProperty` 优于 `@ConditionalOnBean`**:链式 conditional(A 依赖 B 也是 conditional)在 WebMvcTest 里时序不稳,统一用 property gate 干净
 - **`BaselineEvalRunner` 单 case 必须容错**:`catch RuntimeException` 转 errored case,否则一个 timeout 让整 run 崩
 - **`RrfFusionMerger` 输出 score 量级 0.01~0.06**:不要在 retriever 套 cosine 阈值(A-6 fix `RagRetriever.shouldRejectLowConfidence` 已 mode-aware);ES native hybrid 路径 RRF 是 passthrough
 - **GLM-5.1 限速 48 calls/min**:跑 baseline 时打开 `--zhitu.llm.rate-limit.enabled=true`(默认 limitForPeriod=48 / refresh=60s / timeout=120s)
 - **`exit-after-run=true` 跳过 ApplicationReadyEvent**:active stores 启动日志用 `ApplicationStartedEvent` 才能在 BaselineEvalRunner.System.exit 之前打印
+- **失败安全 IT**:Kafka/ES Testcontainers IT 标 `@Tag("integration")` + 文件名 `*IntegrationTest.java`;`mvn test` 排除,`mvn verify` 包含;无 Docker 时 `disabledWithoutDocker=true` 自动跳过
 
 ## 当前状态速查(2026-05-03)
 
 - ✅ 阶段 2 完整: 19 commit + 122 单测基线 + v2 p90 -25%
 - ✅ v3 M1: ES + IK + KnowledgeStore swap (commit `3df2de7`)
 - ✅ v3 M2: 同步上传管线 (commit `0a8ebb1` `c65aaf9` `7940bb6` `3051569`)
-- ✅ 200/200 单测全绿(从 158 +42)
+- ✅ v3 M3: Kafka KRaft 异步管线 (commit `1b4a36a`) — producer 事务 + DLT + idempotent
+- ✅ 217/217 单测全绿(`mvn test`)+ 4 Kafka IT 通过 `mvn verify`(本地无 Docker 自动 skip)
 - ✅ 真实云端 smoke 通过(`docs/m2-smoke-sample.txt` → ES 命中)
 - ⚠️ **routeAcc +0.20 真功臣是 multi-agent SRE Phase 1 不是 ES** — 见 `project_v3_es_stack.md`
-- ⏳ M3 Kafka KRaft 异步管线 待启 (~3d)
-- ⏳ task #2: CLAUDE.md / 叙事框架修 pgvector→InMemory + multi-agent 真功臣
+- 🔄 M4: failsafe IT 拆分 ✅ 完成,文档刷新 ✅ 完成
+- ⏳ M5: sync vs async perf 微基准 + resume 叙事 (~1d)
 
 **下次会话续接**: 看 `project_v3_es_stack.md` 续接 prompt + git log -10 + plan 文件。
 

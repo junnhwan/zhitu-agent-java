@@ -1021,3 +1021,46 @@ zhitu:
 | Multi-Agent | 单 ReAct 一个 ToolRegistry 全暴露 | Supervisor JSON 路由 + 3 SRE Specialist + 工具子集隔离 + 选项 B retrieval + nested span + agent sequence eval 维度 | LangGraph `create_supervisor` / OpenAI Swarm / oncall-agent | MA-1 Phase 1,v3 routeAccuracy +0.2 / multiAgentCases 0→4 / agentSequenceMatch 0→0.75 |
 | **eval 闭环** | **代码已落地缺数字** | **真 LLM baseline + 评测拍出 fusion silent bug + 一行修复 + 重跑闭环** | **BEIR holdout split / 工程师 root cause debug** | **A-5 / A-6 / A-7,v2 p90 latency -25%** |
 
+---
+
+## 阶段 3 v3 ES 栈现代化(2026-05-02 启动,2026-05-03 M1+M2+M3 完成)
+
+**对标参照系**:`D:\dev\learn_proj\wanger\PaiSmart-main` 同栈 Java 项目。**老实话**:v2/v3 不是单变量 ablation(dense 后端、sparse 引擎、ingest pipeline、文件源同时变了),叙事走「工程栈一次性现代化 + 质量与吞吐 trade-off」,不假装是「纯 BM25 ablation」。
+
+### M1(commit `3df2de7`)— pgvector 退役 → ES + IK native hybrid
+
+- **栈变更**:`PgVectorKnowledgeStore` 删除,`ElasticsearchKnowledgeStore` 实现 `KnowledgeStore` 接口;`addAll` = bulk index `_id=chunkId`(`KnowledgeStoreIds.computeChunkId` 复用,UPSERT 幂等);`search` = KNN-only;`lexicalSearch` = match-only;**hybrid 路径** = KNN + match + rescore 单次 ES 调用(window = recallLimit)
+- **维度治理**:启动期 `embeddingModel.dimension()` 校验 vs `zhitu.elasticsearch.vector-dim`,错配 fail-fast;Qwen3-Embedding-8B 输出截断到 2048 dim 对齐 ES `dense_vector` ceiling
+- **可观测**:`ApplicationStartedEvent` 打印 `ZhituAgent active stores: KnowledgeStore=ElasticsearchKnowledgeStore (nativeHybrid=true)`,治理 silent fallback
+
+### M2(commit `0a8ebb1` `c65aaf9` `7940bb6` `3051569`)— MinIO + Tika + 同步入库
+
+- **MinIO**:single-shot upload(小文件)+ chunked + composeObject merge(大文件);Redis bitmap `SETBIT/GETBIT` 跟踪每片完成状态,重传同 chunkIndex 幂等;1h presigned URL
+- **Tika**:`AutoDetectParser` + `StreamingContentHandler` parent-child 切分(parent ~1MB / child ~512 / overlap)+ HanLP `StandardTokenizer` 长句 fallback + heap usage > 80% 抛异常拒收
+- **格式覆盖**:pdf / doc / docx / xls / xlsx / ppt / pptx / txt / rtf / md / html / json / csv / eml / msg(PaiSmart 同级)
+- **smoke 暴露 ES idle 6 分钟后被 server RST**:`ElasticsearchKnowledgeStore.bulkWithRetry` 加 1 次 retry on `IOException`(M2.7 fix)
+
+### M3(commit `1b4a36a`)— Kafka KRaft 异步管线
+
+- **栈**:Kafka 3.7 KRaft 单节点(无 Zookeeper),`bitnami/kafka:3.7` docker 服务 + `confluentinc/cp-kafka:7.6.1` Testcontainers IT
+- **Producer**:`acks=all` + `enable.idempotence=true` + `transactional.id-prefix=zhitu-file-tx-` + `retries=3`;controller `/upload` `/merge` 用 `KafkaTemplate.executeInTransaction` 发 `FileUploadEvent` 立即 HTTP 202
+- **Consumer**:`@KafkaListener` + `read_committed` isolation,`DefaultErrorHandler + DeadLetterPublishingRecoverer + FixedBackOff(3s, 4)` = 5 次尝试后路由到 `zhitu.file.parse.DLT`
+- **idempotency**:at-least-once 重投递 + ES `_id=chunkId` UPSERT = exactly-once-effect;consumer 不开 Kafka tx(side-effect 是 ES 不是 Kafka,事务跨界没收益只增复杂度)
+- **状态机**:`FileParseStatusService` Redis 跟踪 `QUEUED → PARSING → INDEXED/FAILED`,`GET /api/files/status/{uploadId}` 返回 `parseStatus`
+- **toggle**:`zhitu.infrastructure.kafka-enabled` 默认 off → controller 走 M2 同步路径(向后兼容);开启后变 202 异步管线
+
+### 测试治理(M4)
+
+- 217 单测(`mvn test`)+ 4 Kafka IT(`mvn verify`,`@Tag("integration")` + `*IntegrationTest.java`,`maven-failsafe-plugin` 拆分);本地无 Docker `disabledWithoutDocker=true` 自动跳过
+- 真实云端 smoke:`docs/m2-smoke-sample.txt` → MinIO put → Tika parse → ES bulk index → BM25 召回 ✅
+
+### 简历叙事追加(v3 段)
+
+| 层 | v2 现状 | v3 改造 | 业界对标 | 对应 commit |
+|---|---|---|---|---|
+| 检索后端 | pgvector + ILIKE 子串扫描伪 hybrid | ES 8.10 + IK 中文分词 + KNN+BM25+rescore 单次 native hybrid | Anthropic Contextual Retrieval / Elastic 官方 hybrid 模式 | M1 `3df2de7` |
+| 入库 pipeline | 同步 Q:A 字符串 only | MinIO + Tika 多格式解析 + Redis bitmap 分片续传 + parent-child 切分 + HanLP 长句 fallback | PaiSmart / RAGFlow ingestion | M2 `0a8ebb1` `c65aaf9` `7940bb6` `3051569` |
+| 异步管线 | HTTP 阻塞 + 大文件卡线程 | Kafka KRaft 单节点 + 事务 producer + at-least-once consumer + DLT + Redis 状态机 | Spring Cloud Stream / 业界 file-ingestion pipeline | M3 `1b4a36a` |
+
+**🔥 叙事更正**(2026-05-03 发现): v2 vs v3 routeAcc +0.20 提升 **不是 ES 功劳,是 multi-agent SRE Phase 1 commit `3b933bc` 带来的**。证据:重跑 v2(ES off InMemory)+ v3(ES on)对比,18 个非 SRE case 通通 True 通通 True,4 个 SRE case 在 v2 (07:23) 全 False、之后全 True。multi-agent commit 介于 v2 和 v3 baseline 之间,是真正解锁 SRE 路由的改造。**ES 价值在工程深度(IK/KNN/native rescore/真 hybrid),不在数字**。fixture 升级后才能拍出 ES 真价值。
+
